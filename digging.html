@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="27">
+<meta name="dt-version" content="28">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -909,6 +909,7 @@ async function generateRecs(){
 }
 
 async function similarTo(item, progTarget){
+  item = asItem(item);
   // ensure we have ids (artists/labels) and full styles for the seed
   let seed = item;
   if (item.source === 'deezer' && !item.labels.length && item.dzTrackId){
@@ -970,6 +971,48 @@ async function similarTo(item, progTarget){
   prog(1, '');
   return list.slice(0, 30);
 }
+const asItem = t => Object.assign({styles: [], labels: [], genres: [], artists: (t.artist || '').split(',').map(n => ({name: n.trim()})).filter(a => a.name)}, t, {styles: t.styles || [], labels: t.labels || [], genres: t.genres || []});
+// What would fit this playlist? Its own artists/labels network, then filtered on the sound and energy of the playlist itself.
+async function suggestForPlaylist(pl, prog){
+  const items = pl.tracks.map(asItem);
+  if (!items.length) throw new Error('Zet eerst een paar tracks in deze playlist.');
+  prog(0.02, 'Playlist beluisteren…');
+  await measureMany(items, (d, n) => prog(0.02 + 0.13 * d / n, `Playlist beluisteren ${d}/${n}…`));
+  const P = {labels:{}, artists:{}, styles:{}, labelIds:{}, artistIds:{}, dzArtists:{}, years:[], seen:new Set(), n:items.length};
+  items.forEach(it => {
+    it.labels.forEach((l, i) => { if (/^not on label/i.test(l.name)) return; const k = lk(l.name); P.labels[k] = (P.labels[k] || 0) + (i ? 0.5 : 1); P.labelIds[k] = P.labelIds[k] || l; });
+    it.artists.forEach(a => { const k = norm(a.name); P.artists[k] = (P.artists[k] || 0) + 1; P.artistIds[k] = P.artistIds[k] || a; if (a.dz) P.dzArtists[k] = {dz: a.dz, name: a.name}; });
+    markSeen(P, it);
+  });
+  const G = buildProfile();
+  G.seen.forEach(x => P.seen.add(x));
+  P.banArtists = G.banArtists; P.skipArtists = G.skipArtists; P.fanRef = state.fanRef;
+  prepProfile(P);
+  const sk = topN(P.artists, 10).map(([k]) => k);
+  prog(0.18, 'Verwante artiesten zoeken…');
+  await ensureDz(P, sk);
+  await expandRelated(P, sk, 25);
+  const plan = deezerJobs(P, 3, 5, 30, 6, 10);
+  const opts = {popMode: $('#popMode').value, capLabel: 3, capArtist: 1, limit: 70, noShown: true};
+  let list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.2 + 0.5 * f, l + '…'));
+  const inPl = new Set(items.map(enKey));
+  list = list.filter(c => !inPl.has(enKey(c)));
+  await measureMany(list.slice(0, 35), (d, n) => prog(0.7 + 0.3 * d / n, `Kandidaten beluisteren ${d}/${n}…`));
+  const S = soundProfile(items), Sg = soundProfile();
+  const es = items.map(energyOf).filter(Boolean), eLo = es.length ? Math.min(...es) : 1, eHi = es.length ? Math.max(...es) : 5;
+  // which types does this playlist have?
+  const tCount = {}; items.forEach(it => (typesOf(it) || []).forEach(t => tCount[t] = (tCount[t] || 0) + 1));
+  list.forEach(c => {
+    const m = soundMatch(c, S.mu ? S : Sg); let f = m.f;
+    const e = energyOf(c); if (e && (e < eLo - 1 || e > eHi + 1)) f *= 0.4; else if (e && e >= eLo && e <= eHi) f *= 1.1;
+    const ty = typesOf(c) || []; if (ty.length && Object.keys(tCount).length) f *= ty.some(t => tCount[t]) ? 1.25 : 0.7;
+    c.sound = m.f; c.score *= f; c.fit = f; c.fitWhy = ty.filter(t => tCount[t]).map(typeName);
+  });
+  list = list.filter(c => !(c.sound < 0.35) && c.score > 0).sort((a, b) => b.score - a.score).slice(0, 15);
+  prog(1, '');
+  return list;
+}
+
 // tracks shown as "similar" in this session (key -> times)
 const simShown = new Map();
 const markSimShown = list => list.forEach(x => { const k = candKey(x); simShown.set(k, (simShown.get(k) || 0) + 1); });
@@ -2067,8 +2110,8 @@ function fitOf(c, T){
 const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.max(0, Math.round(q * (b.length - 1))))] : 0; };
 const bpmOf = c => { const e = state.energy[enKey(c)]; if (!e) return 0; if (e.bpm) return e.bpm; const m = /(\d+) BPM/.exec(e.why || ''); return m ? +m[1] : 0; };
 const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff'];
-function soundProfile(){
-  const items = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
+function soundProfile(only){
+  const items = only || state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
   const bpms = [], fts = [], types = {};
   let nt = 0;
   items.forEach(c => {
@@ -2077,8 +2120,8 @@ function soundProfile(){
     const t = typesOf(c); if (t && t.length){ nt++; t.forEach(x => types[x] = (types[x] || 0) + 1); }
   });
   const S = {n: fts.length, nb: bpms.length, types, nt, bans: (state.bans || []).map(b => b.ft).filter(Boolean)};
-  if (bpms.length >= 5){ S.bLo = pct(bpms, 0.1) - 4; S.bHi = pct(bpms, 0.9) + 4; }
-  if (fts.length >= 8){
+  if (bpms.length >= (only ? 3 : 5)){ S.bLo = pct(bpms, 0.1) - 4; S.bHi = pct(bpms, 0.9) + 4; }
+  if (fts.length >= (only ? 4 : 8)){
     S.mu = {}; S.sd = {};
     FT_KEYS.forEach(k => { const v = fts.map(f => f[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1);
       S.mu[k] = m; S.sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
@@ -2381,6 +2424,15 @@ async function pushToSpotify(pl, btn){
     if (missing.length) alert('Niet gevonden op Spotify:\n\n' + missing.join('\n'));
   } catch(e){ alert(e.message); btn.disabled = false; btn.textContent = 'Zet in Spotify'; }
 }
+const plSug = {};
+function plSugHTML(pl){
+  const sg = plSug[pl.id]; if (!sg) return '';
+  if (sg.busy) return `<div class="small muted" style="margin:6px 0">${esc(sg.msg || 'Zoeken…')}</div>`;
+  if (sg.err) return `<div class="small bad">${esc(sg.err)}</div>`;
+  const key = 'plsug' + pl.id; inlineLists[key] = sg.list;
+  return `<div class="isim"><div class="small muted" style="margin:6px 0 2px">Past bij deze playlist (${sg.list.length}): <a href="#" data-pla="sugclose">verberg</a></div>`
+    + (sg.list.map((x, i) => recHTML(x, i, key).replace('<button class="btn small" data-act="addpl">+ Playlist</button>', `<button class="btn primary small" data-pla="addsug" data-si="${i}">+ In deze playlist</button><button class="btn small" data-act="addpl">+ Andere playlist</button>`)).join('') || '<div class="small muted">Niets gevonden dat goed genoeg past.</div>') + '</div>';
+}
 function renderPlaylists(){
   $('#plList').innerHTML = state.playlists.map((pl, pi) => {
     const es = pl.tracks.map(energyOf).filter(Boolean);
@@ -2392,15 +2444,17 @@ function renderPlaylists(){
         <a class="btn small" href="https://soundiiz.com/webapp/playlists/import" target="_blank" rel="noopener">Open Soundiiz</a>
         <button class="btn small" data-pla="csv">Download CSV</button>
         <button class="btn small" data-pla="play">▶ Speel af</button>
+        <button class="btn primary small" data-pla="suggest">✨ Wat past hierbij?</button>
         <button class="btn small" data-pla="sortup">Sorteer: energie oplopend</button>
         <button class="btn primary small" data-pla="tospotify">${pl.spotifyUrl ? 'Update in Spotify' : 'Zet in Spotify'}</button>
         ${pl.spotifyUrl ? `<a class="btn small" href="${esc(pl.spotifyUrl)}" target="_blank" rel="noopener">Open in Spotify</a>` : ''}
         <button class="btn small" data-pla="rename">Hernoem</button>
         <button class="btn small" data-pla="del">Verwijder</button>
       </div>
+      <div class="plsug" data-plsug="${pl.id}">${plSugHTML(pl)}</div>
       ${pl.tracks.map((t, i) => `<div class="plrow" data-ti="${i}"><span class="muted small">${i + 1}</span><button class="play" data-pla="playone" title="Preview">▶</button>
         <span>${esc(t.artist)} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
-        <span class="ctl"><button data-pla="up" title="Omhoog">↑</button><button data-pla="down" title="Omlaag">↓</button><button data-pla="rm" title="Verwijder">✕</button></span></div>`).join('') || '<div class="muted small">Nog leeg.</div>'}
+        <span class="ctl"><button data-pla="sim" title="Vergelijkbare tracks">≈</button><button data-pla="up" title="Omhoog">↑</button><button data-pla="down" title="Omlaag">↓</button><button data-pla="rm" title="Verwijder">✕</button></span></div><div class="isim plisim" data-isim="${pl.id}-${i}" hidden></div>`).join('') || '<div class="muted small">Nog leeg.</div>'}
     </div>`;
   }).join('') || '<div class="empty">Nog geen playlists.</div>';
   queueEnergy(state.playlists.flatMap(p => p.tracks));
@@ -2428,6 +2482,38 @@ $('#plList').addEventListener('click', async e => {
     el.download = pl.name.replace(/[^\w\- ]+/g, '') + '.csv'; el.click(); return;
   }
   if (a === 'tospotify') return pushToSpotify(pl, b);
+  if (a === 'suggest'){
+    const box = card.querySelector('[data-plsug]');
+    plSug[pl.id] = {busy: true, msg: 'Zoeken…'}; box.innerHTML = plSugHTML(pl);
+    try {
+      const list = await suggestForPlaylist(pl, (f, t) => { if (plSug[pl.id] && plSug[pl.id].busy){ plSug[pl.id].msg = (t || 'Zoeken…') + ' ' + Math.round(f * 100) + '%'; const bx = document.querySelector(`[data-plsug="${pl.id}"]`); if (bx) bx.innerHTML = plSugHTML(pl); } });
+      plSug[pl.id] = {list};
+    } catch(err){ plSug[pl.id] = {err: err.message}; }
+    const bx = document.querySelector(`[data-plsug="${pl.id}"]`); if (bx){ bx.innerHTML = plSugHTML(pl); fillAvailability(bx, plSug[pl.id].list || []); queueEnergy(plSug[pl.id].list || []); }
+    return;
+  }
+  if (a === 'sugclose'){ e.preventDefault(); delete plSug[pl.id]; card.querySelector('[data-plsug]').innerHTML = ''; return; }
+  if (a === 'addsug'){
+    const c = (plSug[pl.id] || {}).list[+b.dataset.si]; if (!c) return;
+    if (!pl.tracks.some(x => enKey(x) === enKey(c))){ pl.tracks.push(plTrack(c)); toast('Toegevoegd aan ' + pl.name); }
+    plSug[pl.id].list.splice(+b.dataset.si, 1);
+    save(); renderPlaylists(); return;
+  }
+  if (a === 'sim'){
+    const box = card.querySelector(`[data-isim="${pl.id}-${i}"]`);
+    if (!box.hidden){ box.hidden = true; return; }
+    box.hidden = false;
+    if (box.dataset.done) return;
+    box.innerHTML = '<div class="small muted">Vergelijkbare tracks zoeken…</div>';
+    try {
+      const list = (await similarTo(pl.tracks[i], (f, t) => { if (f < 1 && box.firstElementChild) box.firstElementChild.textContent = (t || 'Vergelijkbare tracks zoeken…') + ' ' + Math.round(f * 100) + '%'; })).slice(0, 6);
+      markSimShown(list);
+      const key = 'isim' + (++inlineN); inlineLists[key] = list; box.dataset.done = 1;
+      box.innerHTML = list.length ? '<div class="small muted" style="margin:6px 0 2px">Vergelijkbaar met deze track:</div>' + list.map((x, j) => recHTML(x, j, key)).join('') : '<div class="small muted">Niets gevonden.</div>';
+      fillAvailability(box, list); queueEnergy(list);
+    } catch(err){ box.innerHTML = `<span class="bad small">${esc(err.message)}</span>`; }
+    return;
+  }
   if (a === 'play') return playQueue(qItems(), 0);
   if (a === 'playone') return playQueue(qItems(), i);
   if (a === 'sortup'){ pl.tracks.sort((x, y) => (energyOf(x) || 3) - (energyOf(y) || 3)); }
