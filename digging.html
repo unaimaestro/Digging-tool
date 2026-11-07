@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="29">
+<meta name="dt-version" content="30">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -204,7 +204,7 @@ details.sect:not([open])>summary::before{content:'▸ '}
 <section id="tab-playlists">
   <div class="card">
     <div class="row"><input id="newPlName" class="grow" placeholder="Naam van een nieuwe playlist"><button class="btn primary" id="newPlBtn">Nieuwe playlist</button></div>
-    <p class="small muted" style="margin:8px 0 0">Voeg tracks toe met <b>+ Playlist</b> bij een aanbeveling of in een tracklist. Naar Spotify: klik op "Kopieer voor Spotify" en plak de lijst bij TuneMyMusic of Soundiiz (kies daar "Tekst" of "Free text" als bron, en Spotify als bestemming). Dan staat de playlist in één keer in je Spotify.</p>
+    <p class="small muted" style="margin:8px 0 0">Voeg tracks toe met <b>+ Playlist</b> bij een aanbeveling of in een tracklist. Naar Spotify: het makkelijkst is <b>Zet in Spotify</b> (verbind eerst Spotify bij Instellingen). Of klik op <b>Kopieer Spotify-links</b>, open een playlist in de Spotify-app op je Mac, klik in de tracklijst en druk Cmd+V. "Kopieer als tekst" is voor TuneMyMusic of Soundiiz.</p>
   </div>
   <div id="plList"></div>
 </section>
@@ -2535,7 +2535,8 @@ function renderPlaylists(){
     return `<div class="card" data-pli="${pi}">
       <div class="row"><h2 class="grow" style="margin:0">${esc(pl.name)}</h2><span class="small muted">${pl.tracks.length} tracks${es.length ? ' · energie gem. ' + (es.reduce((a, b) => a + b, 0) / es.length).toFixed(1) : ''}</span></div>
       <div class="row" style="margin:10px 0">
-        <button class="btn primary small" data-pla="copy">Kopieer voor Spotify</button>
+        <button class="btn primary small" data-pla="splinks" title="Kopieer Spotify-links: plak ze in Spotify (desktop) in een playlist met Cmd+V">Kopieer Spotify-links</button>
+        <button class="btn small" data-pla="copy" title="Artiest - Titel, voor TuneMyMusic of Soundiiz">Kopieer als tekst</button>
         <a class="btn small" href="https://www.tunemymusic.com/transfer" target="_blank" rel="noopener">Open TuneMyMusic</a>
         <a class="btn small" href="https://soundiiz.com/webapp/playlists/import" target="_blank" rel="noopener">Open Soundiiz</a>
         <button class="btn small" data-pla="csv">Download CSV</button>
@@ -2580,6 +2581,26 @@ $('#plList').addEventListener('click', async e => {
     el.download = pl.name.replace(/[^\w\- ]+/g, '') + '.csv'; el.click(); return;
   }
   if (a === 'tospotify') return pushToSpotify(pl, b);
+  if (a === 'splinks'){
+    b.disabled = true;
+    const links = [], missing = [];
+    for (let k = 0; k < pl.tracks.length; k++){
+      const t = pl.tracks[k];
+      b.textContent = `Spotify-links zoeken ${k + 1}/${pl.tracks.length}…`;
+      let u = t.spotifyUri;
+      if (!u && spConnected()) u = await spSearch(t.artist, t.title);
+      if (!u){ try { u = (await fullLinks(asItem(t))).spotify; } catch(err){} }
+      const m = u && String(u).match(/track[:/](\w+)/);
+      if (m){ t.spotifyUri = 'spotify:track:' + m[1]; links.push('https://open.spotify.com/track/' + m[1]); } else missing.push(t.artist + ' – ' + t.title);
+    }
+    save();
+    const txt = links.join('\n');
+    try { await navigator.clipboard.writeText(txt); } catch(err){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+    b.disabled = false; b.textContent = 'Kopieer Spotify-links';
+    if (!links.length) alert('Geen Spotify-links gevonden. Verbind Spotify onder Instellingen > Spotify, dan kan de app ze zelf opzoeken (en kun je ook "Zet in Spotify" gebruiken).');
+    else alert(`${links.length} Spotify-links gekopieerd.\n\nOpen een playlist in de Spotify-app op je Mac, klik in de tracklijst en druk Cmd+V.` + (missing.length ? `\n\nNiet gevonden op Spotify (${missing.length}):\n` + missing.join('\n') : ''));
+    return;
+  }
   if (a === 'suggest'){
     const box = card.querySelector('[data-plsug]');
     plSug[pl.id] = {busy: true, msg: 'Zoeken…'}; box.innerHTML = plSugHTML(pl);
