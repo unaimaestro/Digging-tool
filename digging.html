@@ -1,0 +1,2351 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digging Tool</title>
+<meta name="dt-version" content="21">
+<meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
+<style>
+:root{
+  --bg:#0f1011;--panel:#17191b;--panel2:#1f2225;--line:#2b2f33;--text:#e8e6e1;--muted:#8d9196;
+  --accent:#c8f04a;--accent-ink:#141a00;--warn:#f0a04a;--bad:#e86060;--chip:#262a2e;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+header{display:flex;align-items:center;gap:24px;padding:14px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;letter-spacing:.04em;text-transform:uppercase}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--panel2);color:var(--text)}
+#status{margin-left:auto;color:var(--muted);font-size:12px}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 80px}
+section{display:none}section.on{display:block}
+h2{font-size:18px;margin:0 0 12px}
+h3{font-size:13px;margin:20px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+input,textarea,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:8px 10px;font:inherit;width:100%}
+textarea{min-height:200px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:7px 12px;cursor:pointer;font:inherit;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.small{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row>*{flex:0 0 auto}.grow{flex:1 1 200px!important}
+.muted{color:var(--muted)}.small{font-size:12px}
+.chip{display:inline-block;background:var(--chip);border-radius:99px;padding:1px 8px;font-size:11.5px;margin:2px 4px 2px 0;color:#cfd2d4}
+.chip.why{background:#2a3314;color:#d9f59a}
+.progress{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden;margin:10px 0}
+.progress>div{height:100%;background:var(--accent);width:0;transition:width .2s}
+table{width:100%;border-collapse:collapse}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:500;color:var(--muted);font-size:12px}
+.ok{color:var(--accent)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.rec{display:grid;grid-template-columns:84px 1fr auto;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.rec img,.rec .ph{width:84px;height:84px;border-radius:6px;object-fit:cover;background:var(--panel2)}
+.rec .t{font-weight:600}.rec .a{color:var(--text)}
+.rec .acts{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.rec .score{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;text-align:right}
+.tl{margin-top:8px;font-size:12.5px}
+.tl div{display:flex;gap:8px;padding:2px 0}
+.tl .pos{color:var(--muted);width:28px}
+.bars div{display:grid;grid-template-columns:180px 1fr 40px;gap:10px;align-items:center;padding:3px 0;font-size:13px}
+.bars .b{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.bars .b>i{display:block;height:100%;background:var(--accent)}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+#similarPanel{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:10}
+#similarPanel.on{display:block}
+#similarPanel .inner{position:absolute;right:0;top:0;bottom:0;width:min(720px,100%);background:var(--bg);border-left:1px solid var(--line);overflow:auto;padding:20px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+body{padding-bottom:110px}
+#player{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:10px 16px;z-index:20;display:none}
+#player.on{display:block}
+#player .row{flex-wrap:nowrap}
+#wave{width:100%;height:56px;display:block;cursor:pointer;border-radius:4px;background:var(--panel2)}
+#embedBox{flex:0 0 auto}
+#embedBox iframe,#ytWrap,#spWrap{border:0;border-radius:8px;overflow:hidden}
+#ytWrap iframe{width:240px;height:135px;display:block;border-radius:8px}
+#spWrap{width:300px}
+#dzFrame{width:300px;height:92px}
+#scFrame{width:360px;height:140px}
+@media (max-width:720px){#embedBox{display:none}#plKeys{display:none}}
+body.full{padding-bottom:200px}
+#plTitle{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.play{background:var(--accent);color:var(--accent-ink);border:0;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:11px;flex:0 0 26px;line-height:26px;padding:0;text-align:center}
+.play.big{width:40px;height:40px;flex-basis:40px;font-size:14px}
+details.sect>summary{cursor:pointer;list-style:none;padding-bottom:6px}
+details.sect>summary::-webkit-details-marker{display:none}
+details.sect>summary .st{font-size:16px;font-weight:600}
+details.sect>summary::before{content:'▾ ';color:var(--muted)}
+details.sect:not([open])>summary::before{content:'▸ '}
+.isim{margin-top:8px;border-left:2px solid var(--line);padding-left:10px}
+.isim .rec{grid-template-columns:48px 1fr auto;padding:8px 0;gap:10px}
+.isim .rec img,.isim .rec .ph{width:48px;height:48px}
+.isim .rec .play{width:20px;height:20px;flex-basis:20px;line-height:20px;font-size:9px}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.steer{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.tchip{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:4px 12px;cursor:pointer;font:inherit;font-size:13px}
+.tchip.on{background:#3d2f66;border-color:#7d64d6;color:#fff}
+.chip.fit{background:#3b2a12;color:#ffc98a}
+.tl .stores{font-size:11.5px;color:var(--muted)}
+.chip.avail{background:#13303a;color:#8fd8ef}
+.chip.noavail{background:#2a2222;color:#c99}
+.en{display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle;margin-left:6px;cursor:pointer;padding:2px 3px;border-radius:4px}
+.en:hover{background:var(--panel2)}
+.en i{display:block;width:5px;border-radius:1px;background:#3a3f45}
+.en i:nth-child(1){height:5px}.en i:nth-child(2){height:7px}.en i:nth-child(3){height:9px}.en i:nth-child(4){height:11px}.en i:nth-child(5){height:13px}
+.en[data-e="1"] i:nth-child(-n+1),.en[data-e="2"] i:nth-child(-n+2){background:#5fb3d9}
+.en[data-e="3"] i:nth-child(-n+3){background:var(--accent)}
+.en[data-e="4"] i:nth-child(-n+4),.en[data-e="5"] i:nth-child(-n+5){background:#f07a4a}
+.en b{font-size:11px;font-weight:500;color:var(--muted);margin-left:3px;line-height:13px}
+.en.manual b{color:var(--text)}
+.tg{display:inline;cursor:pointer}
+.tg .chip{background:#2c2440;color:#cdbcf5}
+.tg.manual .chip{background:#3d2f66;color:#fff}
+.tg .chip.add{background:none;border:1px dashed #4a4f55;color:var(--muted)}
+#plMenu button.on::before{content:'✓ ';color:var(--accent)}
+#plMenu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+#plMenu.on{display:block}
+#plMenu button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--text);padding:6px 8px;border-radius:5px;cursor:pointer;font:inherit}
+#plMenu button:hover{background:var(--panel2)}
+.plrow{display:grid;grid-template-columns:28px 26px 1fr auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}
+.plrow .ctl button{background:none;border:0;color:var(--muted);cursor:pointer;padding:2px 5px;font-size:13px}
+.plrow .ctl button:hover{color:var(--text)}
+.toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;font-weight:600;z-index:40}
+@media (max-width:640px){.rec{grid-template-columns:56px 1fr}.rec img,.rec .ph{width:56px;height:56px}.rec .acts{grid-column:1/-1;flex-direction:row;flex-wrap:wrap}.bars div{grid-template-columns:110px 1fr 30px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Digging Tool</h1>
+  <nav id="nav">
+    <button data-tab="recs" class="on">Aanbevelingen</button>
+    <button data-tab="sets">Sets</button>
+    <button data-tab="profile">Sound-profiel</button>
+    <button data-tab="likes">Likes</button>
+    <button data-tab="playlists">Playlists</button>
+    <button data-tab="settings">Instellingen</button>
+  </nav>
+  <span id="status"></span>
+</header>
+<main>
+
+<section id="tab-recs" class="on">
+  <div class="card">
+    <div class="row">
+      <button class="btn primary" id="genBtn">Genereer aanbevelingen</button>
+      <label class="small muted">Richting
+        <select id="popMode" style="width:auto">
+          <option value="gems">Verborgen parels</option>
+          <option value="neutral" selected>Neutraal</option>
+          <option value="classics">Klassiekers</option>
+        </select>
+      </label>
+      <label class="small muted">Vanaf jaar <input id="minYear" type="number" placeholder="bv. 1995" style="width:100px"></label>
+      <label class="small muted">Stijl-filter
+        <select id="styleFilter" style="width:auto"><option value="">Alle</option></select>
+      </label>
+      <label class="small muted"><input type="checkbox" id="onlyDigital" style="width:auto"> Alleen digitaal beschikbaar</label>
+      <select id="typeFilter" hidden><option value=""></option></select>
+      <label class="small muted">Energie
+        <select id="enMin" style="width:auto"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        tot <select id="enMax" style="width:auto"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
+      </label>
+    </div>
+    <div class="steer">
+      <div class="row" style="gap:8px">
+        <b class="small">Waar zoek je naar?</b>
+        <select id="preset" style="width:auto" class="small">
+          <option value="">Kies een preset…</option>
+          <option value="hypnotic|4|5">Hypnotic peak time (hypnotic, energie 4–5)</option>
+          <option value="hypnotic,minimal|3|4">Hypnotic rollers (hypnotic/minimal, 3–4)</option>
+          <option value="deep,dub|1|3">Deep & dub warm-up (deep/dub, 1–3)</option>
+          <option value="minimal|2|3">Minimal fillers (minimal, 2–3)</option>
+          <option value="ambient|1|2">Ambient verhalen (ambient, 1–2)</option>
+          <option value="broken|3|5">Broken & energiek (broken beat, 3–5)</option>
+          <option value="|1|5">Geen doel (alles)</option>
+        </select>
+      </div>
+      <div class="row" id="typeChips" style="gap:6px;margin-top:8px"></div>
+      <div class="small muted" style="margin-top:6px">Het doel stuurt het hele zoeken: je sets wegen zwaarder naarmate ze beter passen, en de app luistert de kandidaten af en zet tracks die passen bovenaan. Energie stel je in met "Energie … tot …" hierboven.</div>
+    </div>
+    <div class="progress" id="genProg" hidden><div></div></div>
+    <div class="small muted" id="genMsg"></div>
+  </div>
+  <div id="recList"><div class="empty">Importeer eerst een paar sets, en klik dan op "Genereer aanbevelingen".</div></div>
+</section>
+
+<section id="tab-sets">
+  <div class="card">
+    <h2>Set importeren</h2>
+    <p class="small muted">Tracks worden opgezocht op Deezer (zelfde catalogus als Spotify en Beatport), en op Discogs als je een token hebt ingevuld. Plak een tracklist met één track per regel. <code>Artiest - Titel</code> en <code>Titel – Artiest</code> werken allebei, dat zoekt de app zelf uit. Nummers, tijdcodes, remix-info en een label tussen [haken] mogen erbij staan.</p>
+    <div class="row" style="margin-bottom:8px"><input id="setName" class="grow" placeholder="Naam van de set, bv. Garage Noord feb 2026">
+      <select id="setOrder" style="width:auto"><option value="">Volgorde: automatisch</option><option value="at">Artiest – Titel</option><option value="ta">Titel – Artiest</option></select></div>
+    <textarea id="setText" placeholder="01. Deepchord - Vantage Isle [Echocord]&#10;02. Rhythm & Sound - Mango Drive&#10;00:12:30 Kassem Mosse - Workshop 06 A1"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="importBtn">Importeer en zoek tracks op</button><span class="small muted" id="importMsg"></span></div>
+    <div class="progress" id="impProg" hidden><div></div></div>
+  </div>
+  <div id="setList"></div>
+</section>
+
+<section id="tab-profile">
+  <div id="profileView"></div>
+</section>
+
+<section id="tab-playlists">
+  <div class="card">
+    <div class="row"><input id="newPlName" class="grow" placeholder="Naam van een nieuwe playlist"><button class="btn primary" id="newPlBtn">Nieuwe playlist</button></div>
+    <p class="small muted" style="margin:8px 0 0">Voeg tracks toe met <b>+ Playlist</b> bij een aanbeveling of in een tracklist. Naar Spotify: klik op "Kopieer voor Spotify" en plak de lijst bij TuneMyMusic of Soundiiz (kies daar "Tekst" of "Free text" als bron, en Spotify als bestemming). Dan staat de playlist in één keer in je Spotify.</p>
+  </div>
+  <div id="plList"></div>
+</section>
+
+<section id="tab-likes">
+  <div id="likeList"></div>
+</section>
+
+<section id="tab-settings">
+  <div class="card" id="spCard">
+    <h2>Spotify</h2>
+    <p class="small muted">Koppel je Spotify-account. Dan speelt de app volledige tracks via Spotify (met Premium, ingelogd in deze browser) en zet je playlists met één klik in Spotify. Eenmalig instellen:</p>
+    <ol class="small muted" style="margin:0 0 10px;padding-left:18px">
+      <li>Ga naar <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, log in en klik op "Create app".</li>
+      <li>Naam en beschrijving maken niet uit. Vul bij Redirect URI precies dit in: <code id="spRedir"></code>. Vink "Web API" aan en sla op.</li>
+      <li>Kopieer de "Client ID" van je app en plak hem hieronder.</li>
+    </ol>
+    <div class="row"><input id="spClient" class="grow" placeholder="Spotify Client ID"><button class="btn primary" id="spConnect">Verbind met Spotify</button></div>
+    <div class="small" id="spMsg" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <h2>Discogs-token (optioneel)</h2>
+    <p class="small muted">De app werkt zonder token via Deezer. Met een Discogs-token komen er vinyl-only releases, stijlen en aliassen bij. Maak een persoonlijk token op <a href="https://www.discogs.com/settings/developers" target="_blank" rel="noopener">discogs.com/settings/developers</a> via "Generate new token". Het token blijft alleen in deze browser.</p>
+    <div class="row"><input id="token" class="grow" type="password" placeholder="Plak je token hier"><button class="btn primary" id="saveToken">Opslaan en testen</button></div>
+    <div class="small" id="tokenMsg" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <h2>YouTube-sleutel (optioneel)</h2>
+    <p class="small muted">Voor volledige tracks zoekt de app de juiste YouTube-video. Dat werkt meestal zonder sleutel. Vindt hij vaak niets, maak dan gratis een "YouTube Data API v3"-sleutel aan in <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud</a> (API inschakelen, dan Credentials → API key) en plak hem hier.</p>
+    <div class="row"><input id="ytKey" class="grow" type="password" placeholder="Plak je YouTube API-sleutel"><button class="btn" id="saveYt">Opslaan</button><span class="small" id="ytMsg"></span></div>
+  </div>
+  <div class="card" id="upCard">
+    <h2>Updates</h2>
+    <p class="small muted">De app haalt nieuwe versies zelf op en installeert ze, je data blijft staan. Een gedownloade <b>digging.html</b> in je Downloads-map neemt hij ook vanzelf over. Lukt dat niet, kies het bestand dan hier (of sleep het op dit venster). Je gegevens blijven gewoon staan.</p>
+    <div class="row"><label class="btn primary">Installeer update<input type="file" id="upFile" accept=".html,text/html" hidden></label><span class="small" id="upMsg"></span></div>
+  </div>
+  <div class="card">
+    <h2>Back-up</h2>
+    <p class="small muted">Je sets, likes, playlists en skips worden bij elke wijziging automatisch bewaard in <b>digging-data.json</b> in je app-map (plus één kopie per dag in de map backups). Bij een update of een lege browser zet de app ze vanzelf terug.</p>
+    <p class="small ok" id="bkMsg"></p>
+    <div class="row">
+      <button class="btn" id="exportBtn">Exporteer back-up</button>
+      <label class="btn">Importeer back-up<input type="file" id="importFile" accept=".json" hidden></label>
+      <button class="btn" id="clearCache">Leeg Discogs-cache</button>
+      <button class="btn" id="clearSkips">Reset skips</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<div id="player">
+  <div class="row">
+    <button class="play big" id="plBtn">▶</button>
+    <div class="grow" style="min-width:0">
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><div id="plTitle"></div><div class="small muted" id="plInfo" style="white-space:nowrap"></div></div>
+      <canvas id="wave"></canvas>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+      <button class="btn small" id="plNext" title="Volgende (N)">⏭ Volgende</button>
+      <select id="plSrc" class="small" style="width:auto;padding:3px 6px" title="Waar volledige tracks vandaan komen">
+        <option value="auto">Volledig: auto (SoundCloud met waveform eerst)</option><option value="youtube">Volledig: YouTube</option><option value="spotify">Volledig: Spotify</option>
+        <option value="soundcloud">Volledig: SoundCloud</option><option value="deezer">Volledig: Deezer</option><option value="preview">Alleen preview (waveform)</option>
+      </select>
+    </div>
+    <div id="embedBox">
+      <div id="ytWrap" hidden><div id="ytBox"></div></div>
+      <div id="spWrap" hidden><div id="spBox"></div></div>
+      <iframe id="dzFrame" hidden allow="encrypted-media; clipboard-write" title="Deezer"></iframe>
+      <iframe id="scFrame" hidden allow="autoplay" title="SoundCloud"></iframe>
+    </div>
+  </div>
+  <div class="small warn" id="plDiag" style="margin-top:4px"></div>
+  <div class="small muted" id="plKeys" style="margin-top:4px">Spatie play/pauze · ←/→ 10s · shift+→ 30s · 1–9 spring naar 10–90% · N volgende · P vorige</div>
+</div>
+
+<div id="plMenu"></div>
+<div id="similarPanel"><div class="inner">
+  <div class="row" style="justify-content:space-between"><h2 id="simTitle" style="margin:0">Similar</h2><button class="btn" id="simClose">Sluiten</button></div>
+  <div class="progress" id="simProg"><div></div></div>
+  <div class="small muted" id="simMsg"></div>
+  <div id="simList"></div>
+</div></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+/* ================= Storage ================= */
+const LS_KEY = 'digtool.v1';
+const state = loadState();
+function loadState(){
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) {}
+  return Object.assign({token:'', sets:[], likes:[], skips:[], lastRecs:[], energy:{}, playlists:[], types:{}}, s);
+}
+function save(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){ console.warn(e); } scheduleBackup(); }
+// Automatic backup to digging-data.json in the app folder (through the local server), so browser storage can never lose your data
+const SERVED = /^https?:$/.test(location.protocol) && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+let backupTimer = null, backupReady = false;
+function backupData(){ const {token, sp, ytKey, ...d} = state; return d; }
+function scheduleBackup(){
+  if (!SERVED || !backupReady) return;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => {
+    fetch('/__backup', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.assign(backupData(), {savedAt: new Date().toISOString()}))})
+      .then(r => { if (r.ok) state.__lastBackup = Date.now(); }).catch(() => {});
+  }, 1500);
+}
+function flushBackup(){
+  if (!SERVED || !backupReady) return Promise.resolve();
+  clearTimeout(backupTimer);
+  return fetch('/__backup', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.assign(backupData(), {savedAt: new Date().toISOString()}))}).catch(() => {});
+}
+// merge data from a backup or an older copy of the app into the current data (nothing gets removed)
+function mergeData(d){
+  const key = x => JSON.stringify(x);
+  let added = 0;
+  ['sets', 'likes', 'skips', 'playlists'].forEach(k => {
+    if (!Array.isArray(d[k])) return;
+    const idk = x => x.id != null ? 'id' + x.id : x.releaseId != null ? 'r' + x.releaseId : key(x);
+    const have = new Set((state[k] || []).map(idk));
+    d[k].forEach(x => { if (!have.has(idk(x))){ state[k].push(x); added++; } });
+  });
+  if (!state.lastRecs.length && Array.isArray(d.lastRecs)) state.lastRecs = d.lastRecs;
+  state.energy = Object.assign({}, d.energy || {}, state.energy);
+  state.types = Object.assign({}, d.types || {}, state.types);
+  if (!state.target && d.target) state.target = d.target;
+  ['token', 'ytKey', 'spClient', 'playerPref'].forEach(k => { if (!state[k] && d[k]) state[k] = d[k]; });
+  return added;
+}
+
+const idb = (() => {
+  let dbp;
+  function db(){
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('digtool-cache', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('c');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  async function op(mode, fn){
+    try {
+      const d = await db();
+      return await new Promise((res, rej) => {
+        const tx = d.transaction('c', mode); const st = tx.objectStore('c');
+        const r = fn(st); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error);
+      });
+    } catch(e){ return undefined; }
+  }
+  return {
+    get: k => op('readonly', s => s.get(k)),
+    set: (k, v) => op('readwrite', s => s.put(v, k)),
+    clear: () => op('readwrite', s => s.clear()),
+  };
+})();
+
+/* ================= Discogs API ================= */
+const API = 'https://api.discogs.com';
+const CACHE_DAYS = 14;
+let lastCall = 0;
+const MIN_GAP = 1100; // ~55 req/min, under Discogs' 60/min limit for authenticated calls
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let apiChain = Promise.resolve();
+let discogsDown = false;
+const discogsOk = () => !!state.token && !discogsDown;
+
+function dg(path, params = {}){
+  const qs = new URLSearchParams(params);
+  const key = path + '?' + qs.toString();
+  return (async () => {
+    const hit = await idb.get(key);
+    if (hit && Date.now() - hit.t < CACHE_DAYS * 864e5) return hit.d;
+    // serialize network calls so we respect the rate limit
+    const p = apiChain.then(() => fetchDg(path, qs));
+    apiChain = p.catch(() => {});
+    const d = await p;
+    if (d) idb.set(key, {t: Date.now(), d});
+    return d;
+  })();
+}
+async function fetchDg(path, qs){
+  if (!state.token) throw new Error('Geen Discogs-token. Vul hem in bij Instellingen.');
+  const q = new URLSearchParams(qs); q.set('token', state.token);
+  for (let attempt = 0; attempt < 4; attempt++){
+    const wait = lastCall + MIN_GAP - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCall = Date.now();
+    setStatus('Discogs…');
+    let r;
+    try { r = await fetch(API + path + '?' + q.toString()); }
+    catch(e){ discogsDown = true; setStatus(''); throw new Error('Kon Discogs niet bereiken (' + e.message + ').'); }
+    setStatus('');
+    if (r.status === 429){ setStatus('Discogs limiet, even wachten…'); await sleep(30000); continue; }
+    if (r.status === 404) return null;
+    if (r.status === 401) throw new Error('Discogs weigert je token (401). Ga naar Instellingen en klik op "Opslaan en testen" voor details.');
+    if (!r.ok){ await sleep(1500); continue; }
+    return r.json();
+  }
+  throw new Error('Discogs reageert niet, probeer het zo opnieuw.');
+}
+const getRelease = id => dg('/releases/' + id);
+const getArtist = id => dg('/artists/' + id);
+const search = params => dg('/database/search', Object.assign({type:'release', per_page:100}, params));
+
+/* ================= Text helpers ================= */
+const stripNum = s => (s || '').replace(/\s*\(\d+\)$/, '').replace(/\*$/, '').trim();
+function norm(s){
+  return stripNum(s).toLowerCase()
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/^the\s+/, '').replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// "Mord Records" (Deezer) and "Mord" (Discogs) are the same label
+const lk = s => norm(s).replace(/\b(records?|recordings|music|label|ltd|digital|rec)\b/g, ' ').replace(/\s+/g, ' ').trim() || norm(s);
+const titleCore = s => norm((s || '').replace(/\(.*?\)|\[.*?\]/g, ''));
+const GENERIC_STYLES = new Set(['Techno','House','Electro','Experimental','Ambient']);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const VERSION_RE = /\b(mix|remix|version|rework|edit|dub|interpretation|vip|reshape|remaster(ed)?)\b/i;
+// "Lost Moments (Len Faki Hardspace Mix)" / "Alto - Ness Version" -> "Lost Moments" / "Alto"
+function cleanTitle(t){
+  let s = (t || '').replace(/\(\?\)/g, '');
+  const parts = s.split(/\s+-\s+/);
+  while (parts.length > 1 && VERSION_RE.test(parts[parts.length - 1])) parts.pop();
+  return parts.join(' - ').replace(/\(.*?\)|\[.*?\]/g, '').replace(/\s+/g, ' ').trim();
+}
+function parseLine(raw){
+  let s = raw.replace(/\(\?\)/g, '').trim();
+  if (!s || /^(#|\/\/)/.test(s)) return null;
+  for (let i = 0; i < 3; i++){
+    s = s.replace(/^[\[(]?\d{1,2}(:\d{2}){1,2}[\])]?\s*[-–—.|]?\s*/, '');      // timestamps 0:12:30, [12:30]
+    s = s.replace(/^\d{1,3}\s*[.)\-:]\s+/, '').replace(/^\d{1,3}[.)]\s*/, '').replace(/^\d{1,3}\s+(?=\S)/, ''); // track numbers
+  }
+  let label = '';
+  const lm = s.match(/\s+\[([^\]]+)\]\s*$/);
+  if (lm){ label = lm[1].trim(); s = s.slice(0, lm.index); }
+  // main separator: an en/em dash wins over a plain hyphen (hyphens often sit inside titles)
+  let m = s.match(/\s+[–—]\s+/) || s.match(/\s+-\s+/);
+  if (!m) return {raw, a:'', b:s.trim(), artist:'', title:s.trim(), label, guess:'at'};
+  const a = s.slice(0, m.index).trim(), b = s.slice(m.index + m[0].length).trim();
+  // guess the order: version info or a long artist list tells us which side is which
+  let ta = 0;
+  if (VERSION_RE.test(a)) ta++;
+  if (VERSION_RE.test(b)) ta--;
+  if (/[,;]/.test(b) && !/[,;]/.test(a)) ta++;
+  if (/[,;]/.test(a) && !/[,;]/.test(b)) ta--;
+  const guess = ta > 0 ? 'ta' : 'at';
+  return Object.assign({raw, a, b, label, guess, sure: ta !== 0}, orient({a, b}, guess));
+}
+const orient = (p, o) => o === 'ta' ? {artist: p.b, title: p.a} : {artist: p.a, title: p.b};
+// split "A & B feat. C; D" into individual names
+function splitArtists(s){
+  return (s || '').split(/\s*(?:,|;|&|\bvs\.?|\bfeat\.?|\bft\.?|\bfeaturing|\bx\b|\s\/\s)\s*/i).map(x => x.trim()).filter(Boolean);
+}
+
+/* ================= Resolving tracks ================= */
+const resultArtist = r => stripNum((r.title || '').split(' - ')[0]);
+function titleMatch(a, t){
+  const x = titleCore(cleanTitle(a)), y = titleCore(t);
+  return !!x && !!y && (x === y || (y.length > 3 && x.length > 3 && (x.includes(y) || y.includes(x))));
+}
+async function tryDeezer(names, t){
+  const a1 = names[0];
+  for (const q of [`artist:"${a1}" track:"${t}"`, `${a1} ${t}`]){
+    let d; try { d = await dz('/search', {q, limit: 25}); } catch(e){ continue; }
+    const hit = (d && d.data || []).find(x => x.artist && names.some(n => artistMatch(x.artist.name, n)) && titleMatch(x.title, t));
+    if (hit) return deezerTrackToItem(hit);
+  }
+  return null;
+}
+async function deezerTrackToItem(tr){
+  let album = {};
+  try { if (tr.album && tr.album.id) album = await dz('/album/' + tr.album.id) || {}; } catch(e){}
+  const contrib = (album.tracks && album.tracks.data || []).find(x => x.id === tr.id);
+  return {
+    source: 'deezer', releaseId: 'dzt' + tr.id, dzTrackId: tr.id, dzAlbumId: tr.album && tr.album.id, masterId: null, trackFound: true,
+    title: tr.title, releaseTitle: album.title || (tr.album && tr.album.title) || '',
+    artists: [{name: tr.artist.name, dz: tr.artist.id}].concat((album.contributors || []).filter(c => c.id !== tr.artist.id && c.role === 'Main').slice(0, 3).map(c => ({name: c.name, dz: c.id}))),
+    labels: album.label ? [{name: album.label}] : [],
+    styles: [], genres: (album.genres && album.genres.data || []).map(g => g.name),
+    year: album.release_date ? +album.release_date.slice(0, 4) : null,
+    thumb: (tr.album && (tr.album.cover_medium || tr.album.cover_small)) || album.cover_medium || '',
+    rank: tr.rank || 0, preview: tr.preview || '', uri: tr.link || ('https://www.deezer.com/track/' + tr.id),
+  };
+}
+async function tryOrder(artist, title, label){
+  const names = splitArtists(artist), a1 = names[0] || artist, t = cleanTitle(title);
+  if (!a1 || !t) return null;
+  const dzItem = await tryDeezer(names.length ? names : [a1], t);
+  if (dzItem) return {item: dzItem, confident: true};
+  if (!discogsOk()) return null;
+  let fallback = null;
+  for (const params of [{artist: a1, track: t}, {q: a1 + ' ' + t}]){
+    let res; try { res = await search(Object.assign({per_page: 25}, params)); } catch(e){ if (discogsDown) return null; throw e; }
+    const results = (res && res.results || []).filter(r => (r.genre || []).includes('Electronic') || !r.genre);
+    if (!results.length) continue;
+    const okArtist = r => names.some(n => artistMatch(resultArtist(r), n));
+    let pool = results.filter(okArtist);
+    const various = results.filter(r => /^various/i.test(resultArtist(r)));
+    if (label){ const nl = norm(label); pool.sort((x, y) => ((y.label || []).some(l => norm(l) === nl)) - ((x.label || []).some(l => norm(l) === nl))); }
+    for (const r of pool.slice(0, 2).concat(various.slice(0, 1))){
+      const item = releaseToItem(await getRelease(r.id), {title});
+      if (item && (item.trackFound || okArtist(r))) return {item, confident: true};
+    }
+    if (!fallback && params.track) fallback = results[0];
+  }
+  return fallback ? {item: releaseToItem(await getRelease(fallback.id), {title}), confident: false} : null;
+}
+// p.order: 'at' | 'ta' | undefined (auto). pref: the order that worked best so far in this set.
+async function resolveTrack(p, pref){
+  if (p.a === undefined){ p.a = p.artist; p.b = p.title; p.guess = 'at'; }
+  const orders = p.order ? [p.order] : [...new Set([pref || p.guess, p.guess, 'at', 'ta'])].slice(0, 2);
+  let weak = null;
+  for (const o of orders){
+    const v = orient(p, o);
+    const r = await tryOrder(v.artist, v.title, p.label);
+    if (r && r.confident){ Object.assign(p, v, {resolvedOrder: o}); return r.item; }
+    if (r && r.item && !weak) weak = {item: r.item, v, o};
+  }
+  if (weak){ Object.assign(p, weak.v, {resolvedOrder: weak.o}); weak.item.uncertain = true; return weak.item; }
+  return null;
+}
+
+function releaseToItem(rel, p){
+  if (!rel) return null;
+  let track = null;
+  if (p && p.title){
+    const tc = titleCore(cleanTitle(p.title)), full = titleCore(p.title);
+    track = (rel.tracklist || []).find(t => titleCore(t.title) === full)
+         || (rel.tracklist || []).find(t => titleCore(cleanTitle(t.title)) === tc)
+         || (tc.length > 3 ? (rel.tracklist || []).find(t => { const x = titleCore(t.title); return x.length > 3 && (x.includes(tc) || tc.includes(x)); }) : null);
+  }
+  const artists = (track && track.artists && track.artists.length ? track.artists : rel.artists || [])
+    .filter(a => a.name && !/^various/i.test(a.name))
+    .map(a => ({id: a.id, name: stripNum(a.name)}));
+  return {
+    releaseId: rel.id,
+    trackFound: !!track,
+    masterId: rel.master_id || null,
+    title: track ? track.title : (p && p.title) || rel.title,
+    position: track ? track.position : '',
+    releaseTitle: rel.title,
+    artists,
+    labels: (rel.labels || []).map(l => ({id: l.id, name: stripNum(l.name), catno: l.catno})),
+    styles: rel.styles || [],
+    genres: rel.genres || [],
+    year: rel.year || null,
+    thumb: rel.thumb || (rel.images && rel.images[0] && rel.images[0].uri150) || '',
+    uri: rel.uri || ('https://www.discogs.com/release/' + rel.id),
+  };
+}
+
+/* ================= Profile ================= */
+function buildProfile(T){
+  const P = {labels:{}, artists:{}, styles:{}, labelIds:{}, artistIds:{}, dzArtists:{}, years:[], seen:new Set(), n:0};
+  // with a target, set tracks that fit it count much more; tracks that clearly don't fit count little
+  const tw = item => { if (!T || !hasTarget(T)) return 1; const f = fitOf(item, T).f; return f >= 1.2 ? 3 : f >= 0.8 ? 1 : 0.25; };
+  const add = (item, w) => {
+    if (!item) return;
+    P.n++;
+    (item.labels || []).forEach((l, i) => {
+      if (/^not on label/i.test(l.name)) return;
+      const k = lk(l.name); P.labels[k] = (P.labels[k] || 0) + (i === 0 ? w : w * 0.5);
+      if (l.id || !P.labelIds[k]) P.labelIds[k] = {id: l.id, name: l.name};
+    });
+    (item.artists || []).forEach(a => {
+      const k = norm(a.name); P.artists[k] = (P.artists[k] || 0) + w;
+      if (a.id) P.artistIds[k] = {id: a.id, name: a.name};
+      if (a.dz) P.dzArtists[k] = {dz: a.dz, name: a.name};
+      if (!P.artistIds[k] && !a.id) P.artistIds[k] = {name: a.name};
+    });
+    (item.styles || []).forEach(s => P.styles[s] = (P.styles[s] || 0) + w);
+    if (item.year) P.years.push(item.year);
+  };
+  state.sets.forEach(set => set.tracks.forEach(t => { if (t.item){ add(t.item, tw(t.item)); markSeen(P, t.item); } }));
+  state.likes.forEach(l => { add(l, 1.5); markSeen(P, l); });
+  state.skips.forEach(s => markSeen(P, s));
+  return P;
+}
+function markSeen(P, it){
+  if (it.releaseId) P.seen.add('r' + it.releaseId);
+  if (it.masterId) P.seen.add('m' + it.masterId);
+  const a = (it.artists || []).map(x => norm(x.name)).join('|');
+  P.seen.add('t' + a + '|' + titleCore(it.releaseTitle || it.title));
+  if (it.title && it.artists && it.artists[0]) P.seen.add('k' + norm(it.artists[0].name) + '|' + titleCore(cleanTitle(it.title)));
+}
+const topN = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
+
+/* ================= Candidates & scoring ================= */
+// Turn a Discogs search result into a candidate
+function fromSearch(r){
+  const [artistStr, ...rest] = (r.title || '').split(' - ');
+  const releaseTitle = rest.join(' - ') || r.title;
+  return {
+    releaseId: r.id, masterId: r.master_id || null,
+    title: releaseTitle, releaseTitle,
+    artists: splitArtists(artistStr).map(n => ({name: stripNum(n)})),
+    labels: [...new Set(r.label || [])].map(n => ({name: stripNum(n)})),
+    catno: r.catno, styles: r.style || [], genres: r.genre || [],
+    year: r.year ? +r.year : null, thumb: r.thumb || r.cover_image || '',
+    want: r.community ? r.community.want : 0, have: r.community ? r.community.have : 0,
+    format: (r.format || []).join(', '),
+    uri: 'https://www.discogs.com' + (r.uri || '/release/' + r.id),
+  };
+}
+function fromDz(tr, extra = {}){
+  const arts = (tr.contributors && tr.contributors.length ? tr.contributors : [tr.artist]).filter(Boolean);
+  return {
+    source: 'deezer', releaseId: 'dzt' + tr.id, dzTrackId: tr.id, dzAlbumId: tr.album && tr.album.id, masterId: null,
+    title: tr.title, releaseTitle: (tr.album && tr.album.title) || '',
+    artists: arts.map(a => ({name: a.name, dz: a.id})),
+    labels: extra.label ? [{name: extra.label}] : [], styles: [], genres: [], year: null,
+    thumb: (tr.album && (tr.album.cover_medium || tr.album.cover_small)) || '',
+    rank: tr.rank || 0, preview: tr.preview || '', uri: tr.link || ('https://www.deezer.com/track/' + tr.id),
+  };
+}
+function candKey(c){ if (c.source === 'deezer') return 'k' + norm((c.artists[0] || {}).name) + '|' + titleCore(cleanTitle(c.title)); return c.masterId ? 'm' + c.masterId : 't' + c.artists.map(a => norm(a.name)).join('|') + '|' + titleCore(c.releaseTitle); }
+function isSeen(P, c){
+  return P.seen.has('r' + c.releaseId) || (c.artists[0] && P.seen.has('k' + norm(c.artists[0].name) + '|' + titleCore(cleanTitle(c.title)))) || (c.masterId && P.seen.has('m' + c.masterId))
+      || P.seen.has('t' + c.artists.map(a => norm(a.name)).join('|') + '|' + titleCore(c.releaseTitle));
+}
+
+function scoreCand(c, P, opts){
+  const maxL = Math.max(1, ...Object.values(P.labels));
+  const maxA = Math.max(1, ...Object.values(P.artists));
+  const why = [];
+  let ls = 0;
+  c.labels.forEach(l => {
+    const w = P.labels[lk(l.name)] || 0;
+    if (w > 0){ const v = Math.sqrt(w / maxL); if (v > ls) ls = v; why.push(['Label ' + l.name, w]); }
+  });
+  let as = 0, rs = 0;
+  c.artists.forEach(a => {
+    const k = norm(a.name);
+    const w = P.artists[k] || 0;
+    if (w > 0){ as = Math.max(as, Math.sqrt(w / maxA)); why.push(['Artiest ' + a.name, w]); }
+    const al = P.aliases && P.aliases[k];
+    if (al && !w){ as = Math.max(as, 0.6 * Math.sqrt(al.w / maxA)); why.push([`${a.name} (${al.rel} ${al.of})`, null]); }
+    const rl = P.related && P.related[k];
+    if (rl && !w){ rs = Math.max(rs, Math.sqrt(rl.w / P.maxRel)); why.push([rl.hop === 2 && rl.via ? `Via ${rl.via} → ${rl.of.slice(0, 2).join(', ')}` : `Verwant aan ${rl.of.slice(0, 3).join(', ')}${rl.of.length > 3 ? ' +' + (rl.of.length - 3) : ''}`, null]); }
+  });
+  // style cosine similarity
+  const sv = P.styleVec, cs = c.styles || [];
+  let ss = 0;
+  if (cs.length && sv){
+    let dot = 0; cs.forEach(s => dot += sv[s] || 0);
+    ss = dot / Math.sqrt(cs.length);
+    const hits = cs.filter(s => sv[s]);
+    if (hits.length) why.push(['Stijl ' + hits.join(', '), null]);
+    // punish releases that are mostly outside the profile
+    const off = cs.filter(s => !sv[s]).length / cs.length;
+    ss *= (1 - 0.5 * off);
+  }
+  if (!cs.length) ss = 0.35;               // no style info (Deezer): neutral
+  let score = 0.28 * ls + 0.22 * as + 0.32 * rs + 0.18 * ss;
+  if (c.source !== 'deezer' && !(c.genres || []).includes('Electronic')) score *= 0.4;
+  const pop = c.source === 'deezer' ? Math.log10(1 + (c.rank || 0)) / 6 : Math.log10(1 + (c.want || 0)) / 4; // 0..~1
+  if (opts.popMode === 'gems') score *= 1.08 - 0.25 * Math.min(1, pop);
+  else if (opts.popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
+  else score *= 0.95 + 0.1 * Math.min(1, pop);
+  // which section of the overview it belongs to
+  const section = as > 0 && c.artists.some(a => P.artists[norm(a.name)]) ? 'known' : rs > 0 ? 'related' : ls > 0 ? 'label' : 'related';
+  return {score, section, why: why.map(([t, w]) => w ? `${t} · ${fmtW(w)}` : t)};
+}
+const fmtW = w => (Math.round(w * 10) / 10) + '×';
+
+function prepProfile(P){
+  const tot = Object.values(P.styles).reduce((a, b) => a + b, 0) || 1;
+  const sv = {}; let n2 = 0;
+  Object.entries(P.styles).forEach(([s, w]) => { sv[s] = w / tot; n2 += (w / tot) ** 2; });
+  const nn = Math.sqrt(n2) || 1;
+  Object.keys(sv).forEach(s => sv[s] /= nn);
+  P.styleVec = sv;
+  return P;
+}
+
+async function expandAliases(P, artistKeys, prog){
+  P.aliases = P.aliases || {};
+  const out = [];
+  for (const k of artistKeys){
+    const ref = P.artistIds[k]; if (!ref) { prog && prog(); continue; }
+    try {
+      const a = await getArtist(ref.id);
+      const rels = [['alias van', a && a.aliases], ['groep met', a && a.groups], ['lid van', a && a.members]];
+      rels.forEach(([rel, list]) => (list || []).slice(0, 6).forEach(x => {
+        const xk = norm(x.name);
+        if (!P.artists[xk] && !P.aliases[xk]){ P.aliases[xk] = {w: P.artists[k] || 1, rel, of: ref.name, name: stripNum(x.name)}; out.push(xk); }
+      }));
+    } catch(e){ if (/token/.test(e.message)) throw e; }
+    prog && prog();
+  }
+  return out;
+}
+
+async function gatherAndRank(P, plan, opts, onProg){
+  const steps = plan.length;
+  let done = 0;
+  const pool = new Map();
+  for (const job of plan){
+    try {
+      let cands;
+      if (job.fn) cands = await job.fn();
+      else if (discogsOk()) cands = ((await search(job.params)) || {results: []}).results.map(fromSearch);
+      else cands = [];
+      (cands || []).forEach(c => {
+        if (job.mustLabel && !c.labels.some(l => lk(l.name) === job.mustLabel)) return;
+        if (job.mustArtist && !c.artists.some(a => norm(a.name) === job.mustArtist)) return;
+        const k = candKey(c);
+        const old = pool.get(k);
+        if (!old) pool.set(k, c);
+        else if (!old.labels.length && c.labels.length) old.labels = c.labels;
+      });
+    } catch(e){ if (/token/.test(e.message)) throw e; console.warn(e); }
+    onProg(++done / steps, job.label);
+  }
+  let list = [...pool.values()].filter(c => !isSeen(P, c));
+  if (opts.minYear) list = list.filter(c => !c.year || c.year >= opts.minYear);
+  if (opts.style) list = list.filter(c => !(c.styles || []).length || c.styles.includes(opts.style));
+  list.forEach(c => Object.assign(c, scoreCand(c, P, opts)));
+  list.sort((a, b) => b.score - a.score);
+  // diversity: cap per label and per artist
+  const perL = {}, perA = {}, outl = [], perS = {};
+  for (const c of list){
+    if (opts.sectionLimit && (perS[c.section] || 0) >= (opts.sectionLimit[c.section] ?? 999)) continue;
+    const lkey = c.labels[0] ? lk(c.labels[0].name) : '?' + c.releaseId;
+    const ak = c.artists[0] ? norm(c.artists[0].name) : '';
+    if ((perL[lkey] || 0) >= opts.capLabel || (perA[ak] || 0) >= opts.capArtist) continue;
+    perL[lkey] = (perL[lkey] || 0) + 1; perA[ak] = (perA[ak] || 0) + 1; perS[c.section] = (perS[c.section] || 0) + 1;
+    outl.push(c);
+    if (outl.length >= opts.limit) break;
+  }
+  return outl;
+}
+
+// Deezer artist id for a name (for artists that only came from Discogs)
+function describeTarget(T){
+  const parts = [];
+  if (T.types.length) parts.push(T.types.map(typeName).join('/'));
+  if (T.lo > 1 || T.hi < 5) parts.push('energie ' + (T.lo === T.hi ? T.lo : T.lo + '–' + T.hi));
+  return parts.join(', ') || 'alles';
+}
+async function dzArtistId(name){
+  try {
+    const d = await dz('/search/artist', {q: name, limit: 5});
+    const hit = (d && d.data || []).find(x => norm(x.name) === norm(name));
+    return hit ? hit.id : null;
+  } catch(e){ return null; }
+}
+async function ensureDz(P, keys){
+  for (const k of keys){
+    if (P.dzArtists[k]) continue;
+    const name = (P.artistIds[k] || {}).name || k;
+    const id = await dzArtistId(name);
+    if (id) P.dzArtists[k] = {dz: id, name};
+  }
+}
+// related artists across the seed artists, weighted by how often they show up
+async function expandRelated(P, keys, perArtist = 20){
+  P.related = P.related || {};
+  for (const k of keys){
+    const ref = P.dzArtists[k]; if (!ref) continue;
+    try {
+      const d = await dz('/artist/' + ref.dz + '/related', {limit: perArtist});
+      (d && d.data || []).forEach((x, i) => {
+        const xk = norm(x.name); if (P.artists[xk]) return;
+        const r = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 1});
+        r.w += (P.artists[k] || 1) * (1 - i / (perArtist * 2));
+        if (!r.of.includes(ref.name)) r.of.push(ref.name);
+      });
+    } catch(e){}
+  }
+  P.maxRel = Math.max(1, ...Object.values(P.related).map(r => r.w));
+}
+// second hop: artists related to the related artists. Weighted lower, but artists that many paths lead to rise to the top.
+async function expandRelated2(P, n, perArtist = 15, onStep){
+  const firstHop = Object.values(P.related).sort((a, b) => b.w - a.w).slice(0, n);
+  let i = 0;
+  for (const r of firstHop){
+    try {
+      const d = await dz('/artist/' + r.dz + '/related', {limit: perArtist});
+      (d && d.data || []).forEach((x, j) => {
+        const xk = norm(x.name); if (P.artists[xk]) return;
+        const t = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 2});
+        t.w += 0.35 * r.w * (1 - j / (perArtist * 2));
+        if (t.hop === 2 && !t.via) t.via = r.name;
+        r.of.forEach(o => { if (!t.of.includes(o)) t.of.push(o); });
+      });
+    } catch(e){}
+    onStep && onStep(++i / firstHop.length);
+  }
+  P.maxRel = Math.max(1, ...Object.values(P.related).map(r => r.w));
+}
+const dzTop = (id, limit) => async () => ((await dz('/artist/' + id + '/top', {limit})) || {data: []}).data.map(t => fromDz(t));
+const dzLabel = name => async () => ((await dz('/search', {q: `label:"${name}"`, limit: 100})) || {data: []}).data.map(t => fromDz(t, {label: name}));
+function deezerJobs(P, nLabels, nArtists, nRelated, perRelated = 10, perKnown = 30){
+  const jobs = [];
+  topN(P.labels, nLabels).forEach(([k]) => { const name = (P.labelIds[k] || {}).name || k; jobs.push({fn: dzLabel(name), mustLabel: k, label: 'Label ' + name}); });
+  topN(P.artists, nArtists).forEach(([k]) => { const r = P.dzArtists[k]; if (r) jobs.push({fn: dzTop(r.dz, perKnown), label: 'Artiest ' + r.name}); });
+  Object.values(P.related || {}).sort((a, b) => b.w - a.w).slice(0, nRelated).forEach(r => jobs.push({fn: dzTop(r.dz, perRelated), label: 'Verwant: ' + r.name}));
+  return jobs;
+}
+
+async function generateRecs(){
+  const T = target();
+  const steer = hasTarget(T);
+  const prog = makeProg('#genProg', '#genMsg');
+  if (steer){
+    // make sure the set tracks are measured, so we know which ones fit the target
+    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean);
+    const todo = seeds.filter(c => { const h = state.energy[enKey(c)], t = state.types[enKey(c)]; return !h || !t; }).slice(0, 120);
+    if (todo.length) await measureMany(todo, (d, n) => prog(0.02 * d / n, `Je sets beluisteren voor je doel ${d}/${n}…`));
+  }
+  const P = prepProfile(buildProfile(steer ? T : null));
+  if (!P.n) throw new Error('Nog geen gevonden tracks in je sets.');
+  const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 5, capArtist: 2, limit: 200,
+    sectionLimit: {related: 120, label: 50, known: 20}};
+  const topLabels = topN(P.labels, 15).map(([k]) => k);
+  const topArtists = topN(P.artists, 25).map(([k]) => k);
+  const topStyles = topN(P.styles, 6).map(([s]) => s).filter(s => !GENERIC_STYLES.has(s)).slice(0, 3);
+  prog(0.02, 'Je artiesten opzoeken op Deezer…');
+  await ensureDz(P, topArtists);
+  prog(0.06, 'Verwante artiesten zoeken (stap 1)…');
+  await expandRelated(P, topArtists, 25);
+  prog(0.1, 'Verwante artiesten zoeken (stap 2)…');
+  await expandRelated2(P, 30, 15, f => prog(0.1 + 0.1 * f, 'Verwante artiesten zoeken (stap 2)…'));
+  let i = 0;
+  const aliasKeys = discogsOk() ? await expandAliases(P, topArtists.slice(0, 6), () => prog(0.1 + ++i / 60, 'Aliassen ophalen (Discogs)…')) : [];
+  const plan = deezerJobs(P, 15, 8, 90, 5, 10);
+  if (discogsOk()){
+  topLabels.forEach(k => plan.push({params: {label: (P.labelIds[k] || {}).name || k}, mustLabel: k, label: 'Label ' + ((P.labelIds[k] || {}).name || k)}));
+  topArtists.forEach(k => plan.push({params: {artist: (P.artistIds[k] || {}).name || k}, mustArtist: k, label: 'Artiest ' + ((P.artistIds[k] || {}).name || k)}));
+  aliasKeys.slice(0, 8).forEach(k => plan.push({params: {artist: P.aliases[k].name}, mustArtist: k, label: 'Alias ' + P.aliases[k].name}));
+  topStyles.forEach(s => plan.push({params: {style: s, genre: 'Electronic'}, label: 'Stijl ' + s}));
+  if (topStyles.length >= 2) plan.push({params: {style: topStyles[0] + ', ' + topStyles[1]}, label: 'Stijlen ' + topStyles[0] + ' + ' + topStyles[1]});
+  }
+  let recs = await gatherAndRank(P, plan, opts, (f, l) => prog(0.2 + (steer ? 0.5 : 0.8) * f, l + '…'));
+  let fitInfo = null;
+  if (steer){
+    // listen to the best candidates and re-rank them on the target
+    const listen = recs.filter(c => c.section !== 'known').slice(0, 90).concat(recs.filter(c => c.section === 'known').slice(0, 10));
+    await measureMany(listen, (d, n) => prog(0.7 + 0.3 * d / n, `Kandidaten beluisteren op ${describeTarget(T)} ${d}/${n}…`));
+    let fits = 0;
+    recs.forEach(c => { const r = fitOf(c, T); c.fit = r.f; c.fitWhy = r.why; c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * r.f; if (r.f >= 1.2) fits++; });
+    recs.sort((a, b) => b.score - a.score);
+    fitInfo = {fits, measured: listen.length};
+  }
+  const nArt = new Set(recs.filter(c => c.section !== 'known').map(c => norm((c.artists[0] || {}).name))).size;
+  prog(1, '');
+  recs.meta = {newArtists: nArt, network: Object.keys(P.related).length, fit: fitInfo, target: steer ? describeTarget(T) : ''};
+  return recs;
+}
+
+async function similarTo(item, progTarget){
+  // ensure we have ids (artists/labels) and full styles for the seed
+  let seed = item;
+  if (item.source === 'deezer' && !item.labels.length && item.dzTrackId){
+    try { const tr = await dz('/track/' + item.dzTrackId); if (tr && tr.id) seed = Object.assign(await deezerTrackToItem(tr), {title: item.title}); } catch(e){}
+  } else if (item.source !== 'deezer' && !item.artists.some(a => a.id) && discogsOk()){
+    const rel = await getRelease(item.releaseId);
+    if (rel){ const full = releaseToItem(rel, {title: item.title}); seed = Object.assign({}, full, {title: item.title}); }
+  }
+  const P = {labels:{}, artists:{}, styles:{}, labelIds:{}, artistIds:{}, dzArtists:{}, years:[], seen:new Set(), n:1};
+  seed.labels.forEach((l, i) => { const k = lk(l.name); if (/^not on label/i.test(l.name)) return; P.labels[k] = i ? 0.5 : 1; P.labelIds[k] = l; });
+  seed.artists.forEach(a => { const k = norm(a.name); P.artists[k] = 1; P.artistIds[k] = a; if (a.dz) P.dzArtists[k] = {dz: a.dz, name: a.name}; });
+  seed.styles.forEach(s => P.styles[s] = 1);
+  // light blend with overall sound so "similar" also fits your taste
+  const G = buildProfile();
+  Object.entries(G.styles).forEach(([s, w]) => P.styles[s] = (P.styles[s] || 0) + 0.15 * w / Math.max(1, G.n) );
+  G.seen.forEach(x => P.seen.add(x));
+  markSeen(P, seed);
+  prepProfile(P);
+  const prog = progTarget || makeProg('#simProg', '#simMsg');
+  prog(0.03, 'Verwante artiesten zoeken…');
+  const sk = Object.keys(P.artists).slice(0, 3);
+  await ensureDz(P, sk);
+  await expandRelated(P, sk, 25);
+  const plan = deezerJobs(P, 2, 3, 12);
+  const useDg = discogsOk() && seed.source !== 'deezer';
+  const aliasKeys = useDg ? await expandAliases(P, sk) : [];
+  if (useDg) Object.keys(P.labels).slice(0, 2).forEach(k => {
+    plan.push({params: {label: P.labelIds[k].name}, mustLabel: k, label: 'Label ' + P.labelIds[k].name});
+    if (seed.year) plan.push({params: {label: P.labelIds[k].name, year: seed.year}, mustLabel: k, label: 'Label ' + P.labelIds[k].name + ' ' + seed.year});
+  });
+  if (useDg) Object.keys(P.artists).slice(0, 3).forEach(k => plan.push({params: {artist: P.artistIds[k].name}, mustArtist: k, label: 'Artiest ' + P.artistIds[k].name}));
+  aliasKeys.slice(0, 4).forEach(k => plan.push({params: {artist: P.aliases[k].name}, mustArtist: k, label: 'Alias ' + P.aliases[k].name}));
+  const specific = seed.styles.filter(s => !GENERIC_STYLES.has(s));
+  const st = specific.length ? specific : seed.styles;
+  if (useDg && st.length){
+    const yr = seed.year ? {year: seed.year} : {};
+    plan.push({params: Object.assign({style: st.slice(0, 2).join(', ')}, yr), label: 'Stijl ' + st.slice(0, 2).join(' + ')});
+    if (seed.year) [-2, -1, 1, 2].forEach(d => plan.push({params: {style: st[0], year: seed.year + d}, label: 'Stijl ' + st[0] + ' ' + (seed.year + d)}));
+  }
+  const opts = {popMode: $('#popMode').value, capLabel: 4, capArtist: 2, limit: 30};
+  const list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.1 + 0.9 * f, l + '…'));
+  // nearby years get a small boost
+  if (seed.year) list.forEach(c => { if (c.year) c.score *= 1 - Math.min(0.25, Math.abs(c.year - seed.year) * 0.025); });
+  list.sort((a, b) => b.score - a.score);
+  prog(1, '');
+  return list;
+}
+
+/* ================= Platforms: availability & previews ================= */
+// Deezer and iTunes don't send CORS headers for their search APIs, so use JSONP.
+let jsonpN = 0;
+function jsonp(url, cbParam = 'callback', timeout = 8000){
+  return new Promise((res, rej) => {
+    const name = '__jp' + (++jsonpN) + '_' + Date.now();
+    const s = document.createElement('script');
+    const done = v => { delete window[name]; s.remove(); clearTimeout(to); v instanceof Error ? rej(v) : res(v); };
+    const to = setTimeout(() => done(new Error('timeout')), timeout);
+    window[name] = d => done(d);
+    s.onerror = () => done(new Error('jsonp error'));
+    s.src = url + (url.includes('?') ? '&' : '?') + cbParam + '=' + name;
+    document.head.appendChild(s);
+  });
+}
+// Deezer API (no key needed). Max 50 calls per 5s, so keep a small gap.
+const DZ = 'https://api.deezer.com';
+let dzChain = Promise.resolve(), dzLast = 0;
+function dz(path, params = {}, ttlMs = CACHE_DAYS * 864e5){
+  const qs = new URLSearchParams(params); qs.set('output', 'jsonp');
+  const key = 'dz:' + path + '?' + qs.toString();
+  return (async () => {
+    if (ttlMs){ const hit = await idb.get(key); if (hit && Date.now() - hit.t < ttlMs) return hit.d; }
+    const p = dzChain.then(async () => {
+      for (let attempt = 0; attempt < 3; attempt++){
+        const wait = dzLast + 130 - Date.now(); if (wait > 0) await sleep(wait);
+        dzLast = Date.now();
+        const d = await jsonp(DZ + path + '?' + qs.toString());
+        if (d && d.error){ if (d.error.code === 4){ await sleep(2000); continue; } if (d.error.code === 800) return null; throw new Error('Deezer: ' + (d.error.message || 'fout')); }
+        return d;
+      }
+      throw new Error('Deezer: te veel verzoeken');
+    });
+    dzChain = p.catch(() => {});
+    const d = await p;
+    if (d && ttlMs) idb.set(key, {t: Date.now(), d});
+    return d;
+  })();
+}
+async function cached(key, fn){
+  const hit = await idb.get(key);
+  if (hit && Date.now() - hit.t < CACHE_DAYS * 864e5) return hit.d;
+  const d = await fn();
+  idb.set(key, {t: Date.now(), d});
+  return d;
+}
+const artistMatch = (a, b) => { const x = ' ' + norm(a) + ' ', y = ' ' + norm(b) + ' '; return x.trim() && y.trim() && (x === y || x.includes(y) || y.includes(x)); };
+
+// Find a 30s preview for one track. Deezer first (best underground coverage), then iTunes.
+async function findPreview(artist, title){
+  const t = (title || '').replace(/\(.*?\)|\[.*?\]/g, '').trim();
+  const mainArtist = splitArtists(artist)[0] || artist;
+  return cached('pv:' + norm(artist) + '|' + norm(title), async () => {
+    const out = {};
+    try {
+      const q = encodeURIComponent(`artist:"${mainArtist}" track:"${t}"`);
+      const d = await jsonp(`https://api.deezer.com/search?q=${q}&limit=10&output=jsonp`);
+      const hit = (d.data || []).find(x => artistMatch(x.artist && x.artist.name, mainArtist) && titleCore(x.title).includes(titleCore(t)))
+               || (d.data || []).find(x => artistMatch(x.artist && x.artist.name, mainArtist));
+      if (hit){ out.deezer = hit.link; if (hit.preview) out.preview = hit.preview; }
+    } catch(e){}
+    try {
+      const d = await jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(mainArtist + ' ' + t)}&entity=song&limit=10`);
+      const hit = (d.results || []).find(x => artistMatch(x.artistName, mainArtist) && titleCore(x.trackName).includes(titleCore(t)))
+               || (d.results || []).find(x => artistMatch(x.artistName, mainArtist));
+      if (hit){ out.apple = hit.trackViewUrl; if (!out.preview && hit.previewUrl) out.preview = hit.previewUrl; }
+    } catch(e){}
+    return out;
+  });
+}
+// Is the release available digitally? (Deezer album search, cached)
+async function digitalAvailability(c){
+  const a = (c.artists[0] || {}).name || '';
+  return cached('av:' + norm(a) + '|' + titleCore(c.releaseTitle), async () => {
+    try {
+      const d = await jsonp(`https://api.deezer.com/search/album?q=${encodeURIComponent(a + ' ' + c.releaseTitle.replace(/\(.*?\)/g, ''))}&limit=10&output=jsonp`);
+      const hit = (d.data || []).find(x => artistMatch(x.artist && x.artist.name, a) && (titleCore(x.title).includes(titleCore(c.releaseTitle)) || titleCore(c.releaseTitle).includes(titleCore(x.title))));
+      return hit ? {deezer: hit.link} : {none: true};
+    } catch(e){ return {unknown: true}; }
+  });
+}
+// Store links. Bandcamp, Qobuz, Beatport and Juno sell lossless (FLAC/WAV) downloads.
+function storeLinks(artist, title, extra = {}){
+  const q = encodeURIComponent((artist + ' ' + title).replace(/\(.*?\)/g, '').trim());
+  const L = [
+    ['Bandcamp', `https://bandcamp.com/search?q=${q}&item_type=t`, 'FLAC'],
+    ['Qobuz', `https://www.qobuz.com/nl-nl/search?q=${q}`, 'FLAC'],
+    ['Beatport', `https://www.beatport.com/search?q=${q}`, 'FLAC/WAV'],
+    ['Juno', `https://www.junodownload.com/search/?q%5Ball%5D%5B%5D=${q}`, 'FLAC/WAV'],
+    ['Spotify', `https://open.spotify.com/search/${q}`],
+    ['Apple', extra.apple || `https://music.apple.com/search?term=${q}`],
+    ['Deezer', extra.deezer || `https://www.deezer.com/search/${q}`],
+    ['YouTube', `https://www.youtube.com/results?search_query=${q}`],
+  ];
+  return L.map(([n, u, f]) => `<a href="${esc(u)}" target="_blank" rel="noopener" title="${f ? 'Lossless download: ' + f : ''}">${n}${f ? '<sup>⬇</sup>' : ''}</a>`).join(' · ');
+}
+
+/* ================= Player with waveform ================= */
+const audio = new Audio();
+audio.preload = 'auto';
+let queue = [], qi = -1, peaks = null, actx = null;
+const peakCache = new Map();
+const decodeCache = new Map();
+function decodeUrl(url){
+  if (decodeCache.has(url)) return decodeCache.get(url);
+  const p = (async () => {
+    const r = await fetch(url);                       // needs CORS on the preview file
+    if (!r.ok) throw new Error('preview ' + r.status);
+    const buf = await r.arrayBuffer();
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    return await actx.decodeAudioData(buf);
+  })();
+  decodeCache.set(url, p); p.catch(() => decodeCache.delete(url));
+  if (decodeCache.size > 6) decodeCache.delete(decodeCache.keys().next().value);
+  return p;
+}
+async function computePeaks(url){
+  if (peakCache.has(url)) return peakCache.get(url);
+  const ab = await decodeUrl(url);
+  const ch = ab.getChannelData(0), N = 400, step = Math.floor(ch.length / N), p = new Float32Array(N);
+  for (let i = 0; i < N; i++){ let m = 0; for (let j = i * step, e = j + step; j < e; j += 16){ const v = Math.abs(ch[j]); if (v > m) m = v; } p[i] = m; }
+  const mx = Math.max(...p) || 1; for (let i = 0; i < N; i++) p[i] /= mx;
+  peakCache.set(url, p);
+  return p;
+}
+/* ================= Energy 1-5 ================= */
+// Measured from the 30s preview: tempo, loudness, how busy the rhythm is (onsets/s) and brightness (share of highs).
+const enKey = c => norm((c.artists[0] || {}).name) + '|' + titleCore(cleanTitle(c.title || c.releaseTitle));
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const lin = (x, a, b) => clamp01((x - a) / (b - a));
+function energyOf(c){ const e = state.energy[enKey(c)]; return e ? e.e : null; }
+function enBadge(c){
+  const rec = state.energy[enKey(c)], e = rec ? rec.e : 0;
+  const tip = rec ? (rec.manual ? 'Zelf ingesteld' : 'Gemeten: ' + rec.why) + ' · klik om aan te passen' : 'Energie wordt gemeten…';
+  return `<span class="en${rec && rec.manual ? ' manual' : ''}" data-ek="${esc(enKey(c))}" data-e="${e}" title="${esc(tip)}">${'<i></i>'.repeat(5)}<b>${e || '…'}</b></span>`;
+}
+function refreshBadges(key){
+  document.querySelectorAll('.en[data-ek]').forEach(b => {
+    if (key && b.dataset.ek !== key) return;
+    const rec = state.energy[b.dataset.ek]; if (!rec) return;
+    b.dataset.e = rec.e; b.querySelector('b').textContent = rec.e;
+    b.classList.toggle('manual', !!rec.manual);
+    b.title = (rec.manual ? 'Zelf ingesteld' : 'Gemeten: ' + rec.why) + ' · klik om aan te passen';
+  });
+}
+// click a badge: pick 1-5 by where you click on the bars (or cycle on the number)
+document.addEventListener('click', e => {
+  const b = e.target.closest('.en[data-ek]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const bars = [...b.querySelectorAll('i')];
+  let v = bars.indexOf(e.target) + 1;
+  if (!v) v = ((+b.dataset.e || 0) % 5) + 1;
+  const old = state.energy[b.dataset.ek] || {};
+  state.energy[b.dataset.ek] = Object.assign({}, old, {e: v, manual: true});
+  save(); refreshBadges(b.dataset.ek); applyDigitalFilter();
+}, true);
+
+function audioFeatures(ab){
+  const sr = ab.sampleRate, n = ab.length;
+  const L = ab.getChannelData(0), R = ab.numberOfChannels > 1 ? ab.getChannelData(1) : L;
+  // skip the fade-in/out of the preview
+  const s0 = Math.floor(n * 0.05), s1 = Math.floor(n * 0.95);
+  const aLow = 1 - Math.exp(-2 * Math.PI * 150 / sr), aHi = 1 - Math.exp(-2 * Math.PI * 4000 / sr);
+  let lp = 0, lp2 = 0, sAll = 0, sLow = 0, sHigh = 0;
+  const hop = 512, frames = [], lowFr = [], highFr = []; let acc = 0, accL = 0, accH = 0, cnt = 0;
+  for (let i = s0; i < s1; i++){
+    const x = (L[i] + R[i]) * 0.5;
+    lp += aLow * (x - lp); lp2 += aHi * (x - lp2);
+    const hi = x - lp2;
+    sAll += x * x; sLow += lp * lp; sHigh += hi * hi;
+    acc += x * x; accL += lp * lp; accH += hi * hi;
+    if (++cnt === hop){ frames.push(Math.sqrt(acc / hop)); lowFr.push(Math.sqrt(accL / hop)); highFr.push(Math.sqrt(accH / hop)); acc = accL = accH = 0; cnt = 0; }
+  }
+  const N = s1 - s0, rms = Math.sqrt(sAll / N);
+  const db = 20 * Math.log10(rms + 1e-9);
+  // onset strength: positive jumps in log-energy
+  const fr = sr / hop, le = frames.map(f => Math.log10(f + 1e-6));
+  const flux = le.map((v, i) => i ? Math.max(0, v - le[i - 1]) : 0);
+  const mean = flux.reduce((a, b) => a + b, 0) / flux.length;
+  const sd = Math.sqrt(flux.reduce((a, b) => a + (b - mean) ** 2, 0) / flux.length);
+  let onsets = 0, last = -99;
+  flux.forEach((v, i) => { if (v > mean + 1.2 * sd && i - last > fr * 0.08){ onsets++; last = i; } });
+  const onsetRate = onsets / (N / sr);
+  // tempo from autocorrelation of the onset curve, 95-160 BPM
+  let best = 0, bestLag = 0;
+  for (let bpm = 95; bpm <= 160; bpm += 0.5){
+    const lag = fr * 60 / bpm, li = Math.floor(lag), fpart = lag - li; let c = 0;
+    for (let i = 0; i + li + 1 < flux.length; i++) c += flux[i] * (flux[i + li] * (1 - fpart) + flux[i + li + 1] * fpart);
+    if (c > best){ best = c; bestLag = bpm; }
+  }
+  // dynamic range: loud vs quiet frames (busy, compressed tracks have little)
+  const sorted = frames.slice().sort((a, b) => a - b);
+  const p10 = sorted[Math.floor(sorted.length * 0.1)] + 1e-6, p90 = sorted[Math.floor(sorted.length * 0.9)] + 1e-6;
+  // normalized autocorrelation of a curve at a (fractional) lag
+  const acf = (arr, lag) => {
+    const m = arr.reduce((a, b) => a + b, 0) / arr.length, d = arr.map(v => v - m);
+    const z = d.reduce((a, v) => a + v * v, 0) || 1, li = Math.floor(lag), fp = lag - li; let c = 0;
+    for (let i = 0; i + li + 1 < d.length; i++) c += d[i] * (d[i + li] * (1 - fp) + d[i + li + 1] * fp);
+    return c / z;
+  };
+  const beat = fr * 60 / (bestLag || 125);
+  const periodicity = Math.max(0, acf(flux, beat));                      // how strictly the groove repeats
+  const lowLe = lowFr.map(v => Math.log10(v + 1e-6)), lowFlux = lowLe.map((v, i) => i ? Math.max(0, v - lowLe[i - 1]) : 0);
+  const fourFloor = Math.max(0, acf(lowFlux, beat));                     // kick on every beat
+  const echo = Math.max(0, acf(frames, beat * 0.75), acf(frames, beat * 0.375)); // dotted delays, typical for dub
+  const sparsity = frames.filter(v => v < 0.3 * p90).length / frames.length;    // gaps between elements
+  // how much the track changes over the preview (thirds): loudness and timbre
+  const third = Math.floor(frames.length / 3), seg = k => {
+    const sl = (a) => a.slice(k * third, (k + 1) * third), mean = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+    const e = mean(sl(frames)) + 1e-9; return {db: 20 * Math.log10(e), lo: mean(sl(lowFr)) / e, hi: mean(sl(highFr)) / e};
+  };
+  const S = [seg(0), seg(1), seg(2)];
+  let change = 0;
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) change = Math.max(change, Math.abs(S[i].db - S[j].db) + 20 * Math.abs(S[i].lo - S[j].lo) + 40 * Math.abs(S[i].hi - S[j].hi));
+  const r2 = x => Math.round(x * 1000) / 1000;
+  return {db: r2(db), lowShare: r2(Math.sqrt(sLow / sAll)), highShare: r2(Math.sqrt(sHigh / sAll)), onsetRate: r2(onsetRate), bpm: bestLag, crest: r2(20 * Math.log10(p90 / p10)),
+    periodicity: r2(periodicity), fourFloor: r2(fourFloor), echo: r2(echo), sparsity: r2(sparsity), change: r2(change)};
+}
+function energyFrom(f, meta){
+  const bpm = meta.bpm > 60 ? meta.bpm : f ? f.bpm : 0;
+  const parts = [], why = [];
+  if (bpm){ parts.push([0.30, lin(bpm, 118, 145)]); why.push(Math.round(bpm) + ' BPM'); }
+  if (f){
+    parts.push([0.25, lin(f.db, -20, -9)]);        why.push(Math.round(f.db) + ' dB');
+    parts.push([0.25, lin(f.onsetRate, 1.5, 6)]);  why.push(f.onsetRate.toFixed(1) + ' hits/s');
+    parts.push([0.20, lin(f.highShare, 0.06, 0.30)]); why.push('highs ' + Math.round(f.highShare * 100) + '%');
+  } else if (meta.gain){
+    parts.push([0.30, lin(meta.gain, -14, -6)]); why.push('gain ' + meta.gain + ' dB');
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, p) => a + p[0], 0);
+  const raw = parts.reduce((a, p) => a + p[0] * p[1], 0) / w;
+  return {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f};
+}
+/* ================= Track type ================= */
+const TYPES = [['minimal', 'Minimal'], ['hypnotic', 'Hypnotic'], ['ambient', 'Ambient'], ['deep', 'Deep'], ['dub', 'Dub'], ['broken', 'Broken beat']];
+const typeName = k => (TYPES.find(t => t[0] === k) || [k, k])[1];
+const STYLE_HINTS = {
+  minimal: ['Minimal', 'Minimal Techno', 'Microhouse'], ambient: ['Ambient', 'Ambient Techno', 'Drone', 'Downtempo', 'Experimental'],
+  deep: ['Deep House', 'Deep Techno'], dub: ['Dub Techno', 'Dub'], broken: ['Broken Beat', 'Breaks', 'Breakbeat', 'Electro', 'IDM', 'UK Garage', 'Leftfield'],
+  hypnotic: [],
+};
+function typesFrom(f, styles){
+  const st = new Set(styles || []), sc = {};
+  TYPES.forEach(([k]) => sc[k] = 0);
+  if (f){
+    sc.minimal  = 0.40 * lin(f.sparsity, 0.2, 0.55) + 0.30 * (1 - lin(f.highShare, 0.08, 0.25)) + 0.30 * (1 - lin(f.onsetRate, 2, 6));
+    sc.hypnotic = 0.45 * lin(f.periodicity, 0.2, 0.55) + 0.35 * (1 - lin(f.change, 1, 6)) + 0.20 * lin(f.onsetRate, 2, 5);
+    sc.ambient  = 0.35 * (1 - lin(f.periodicity, 0.1, 0.35)) + 0.35 * lin(f.change, 2, 8) + 0.30 * (1 - lin(f.onsetRate, 1, 3.5));
+    sc.deep     = 0.45 * lin(f.lowShare, 0.35, 0.7) + 0.35 * (1 - lin(f.highShare, 0.05, 0.2)) + 0.20 * (1 - lin(f.db, -16, -8));
+    sc.dub      = 0.35 * lin(f.lowShare, 0.4, 0.75) + 0.30 * (1 - lin(f.highShare, 0.04, 0.15)) + 0.35 * lin(f.echo, 0.15, 0.45);
+    sc.broken   = 0.60 * (1 - lin(f.fourFloor, 0.15, 0.45)) + 0.40 * lin(f.onsetRate, 2, 5);
+  }
+  Object.entries(STYLE_HINTS).forEach(([k, list]) => { if (list.some(x => st.has(x))) sc[k] = Math.min(1, sc[k] + (f ? 0.35 : 0.7)); });
+  const ranked = Object.entries(sc).sort((a, b) => b[1] - a[1]);
+  let tags = ranked.filter(([, v]) => v >= 0.6).slice(0, 2).map(([k]) => k);
+  if (!tags.length && ranked[0][1] > 0.3) tags = [ranked[0][0]];
+  const r = {};
+  Object.entries(sc).forEach(([k, v]) => r[k] = Math.round(v * 100) / 100);
+  return {tags, scores: r};
+}
+function typesOf(c){ const t = state.types[enKey(c)]; return t ? t.tags : null; }
+function typeChips(c){
+  const t = state.types[enKey(c)];
+  const inner = t ? (t.tags.length ? t.tags.map(k => `<span class="chip">${esc(typeName(k))}</span>`).join('') : '<span class="chip add">+ type</span>') : '';
+  return `<span class="tg${t && t.manual ? ' manual' : ''}" data-tk="${esc(enKey(c))}" title="${t ? (t.manual ? 'Zelf ingesteld' : 'Automatisch geschat') + ' · klik om aan te passen' : ''}">${inner}</span>`;
+}
+function refreshTypes(key){
+  document.querySelectorAll('.tg[data-tk]').forEach(el => {
+    if (key && el.dataset.tk !== key) return;
+    const t = state.types[el.dataset.tk]; if (!t) return;
+    el.className = 'tg' + (t.manual ? ' manual' : '');
+    el.title = (t.manual ? 'Zelf ingesteld' : 'Automatisch geschat') + ' · klik om aan te passen';
+    el.innerHTML = t.tags.length ? t.tags.map(k => `<span class="chip">${esc(typeName(k))}</span>`).join('') : '<span class="chip add">+ type</span>';
+  });
+}
+// click on the type chips: toggle types in a small menu
+let tgKey = null;
+document.addEventListener('click', e => {
+  const el = e.target.closest('.tg[data-tk]');
+  if (el){
+    e.preventDefault(); e.stopPropagation();
+    tgKey = el.dataset.tk; plPending = null;
+    const t = state.types[tgKey] || {tags: []};
+    const m = $('#plMenu');
+    m.innerHTML = TYPES.map(([k, n]) => `<button data-tt="${k}" class="${t.tags.includes(k) ? 'on' : ''}">${n}</button>`).join('') + (t.manual ? '<button data-tt="auto">↺ Terug naar automatisch</button>' : '');
+    const r = el.getBoundingClientRect();
+    m.style.top = (window.scrollY + r.bottom + 4) + 'px';
+    m.style.left = Math.max(8, Math.min(window.innerWidth - 230, window.scrollX + r.left)) + 'px';
+    m.classList.add('on');
+    return;
+  }
+  const b = e.target.closest('#plMenu [data-tt]');
+  if (b && tgKey){
+    e.stopPropagation();
+    const t = state.types[tgKey] || {tags: []};
+    if (b.dataset.tt === 'auto'){
+      const auto = t.auto || {tags: []};
+      state.types[tgKey] = Object.assign({}, t, {tags: auto.tags || [], manual: false});
+      $('#plMenu').classList.remove('on');
+    } else {
+      const k = b.dataset.tt, tags = t.tags.includes(k) ? t.tags.filter(x => x !== k) : t.tags.concat(k);
+      state.types[tgKey] = Object.assign({}, t, {tags, manual: true, auto: t.auto || (t.manual ? t.auto : {tags: t.tags})});
+      b.classList.toggle('on');
+    }
+    save(); refreshTypes(tgKey); applyDigitalFilter();
+  }
+}, true);
+
+async function measureEnergy(c){
+  const key = enKey(c);
+  const have = state.energy[key], haveT = state.types[key];
+  const recentTry = haveT && haveT.tried && Date.now() - haveT.tried < 7 * 864e5;
+  if (have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
+  const artist = c.artists.map(a => a.name).join(', '), title = c.source === 'deezer' || c.trackFound ? c.title : c.title || c.releaseTitle;
+  let meta = {}, preview = c.preview;
+  try {
+    let id = c.dzTrackId;
+    if (!id){ const pv = await findPreview(artist, title); preview = preview || pv.preview; const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; }
+    if (id){ const tr = await dz('/track/' + id, {}, 6 * 36e5); if (tr){ meta = {bpm: tr.bpm, gain: tr.gain}; preview = tr.preview || preview; } }
+  } catch(e){}
+  let f = null;
+  if (preview){ try { f = audioFeatures(await decodeUrl(preview)); } catch(e){} }
+  const r = energyFrom(f, meta);
+  if (r && !(have && have.manual)) state.energy[key] = r;
+  if (!(haveT && haveT.manual)){
+    const t = typesFrom(f, c.styles);
+    state.types[key] = Object.assign(t, {audio: !!f, tried: Date.now()});
+  }
+  save();
+  return state.energy[key] || r;
+}
+let enQueue = [], enBusy = false;
+const enQueued = new Set();
+function queueEnergy(list){
+  list.forEach(c => { if (!c) return; const k = enKey(c), h = state.energy[k], t = state.types[k];
+    const recent = t && t.tried && Date.now() - t.tried < 7 * 864e5;
+    const needE = !h || (h.partial && !h.manual && !recent), needT = !t || (!t.manual && !t.audio && !recent);
+    if ((needE || needT) && !enQueued.has(k)){ enQueued.add(k); enQueue.push(c); } });
+  runEnergy();
+}
+async function runEnergy(){
+  if (enBusy) return; enBusy = true;
+  while (enQueue.length){
+    const c = enQueue.shift();
+    try { await measureEnergy(c); refreshBadges(enKey(c)); refreshTypes(enKey(c)); applyDigitalFilter(); } catch(e){}
+  }
+  enBusy = false;
+  document.querySelectorAll('.en[data-ek]').forEach(b => { if (!state.energy[b.dataset.ek]){ b.querySelector('b').textContent = '?'; b.title = 'Geen preview gevonden om energie te meten · klik om zelf in te stellen'; } });
+}
+
+function drawWave(){
+  const cv = $('#wave'), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr){ cv.width = w * dpr; cv.height = h * dpr; }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const prog = audio.duration ? audio.currentTime / audio.duration : 0;
+  const css = getComputedStyle(document.documentElement);
+  const on = css.getPropertyValue('--accent').trim(), off = '#4a4f55';
+  if (peaks){
+    const bw = w / peaks.length;
+    for (let i = 0; i < peaks.length; i++){
+      const v = Math.max(0.03, peaks[i]) * (h - 6);
+      g.fillStyle = i / peaks.length < prog ? on : off;
+      g.fillRect(i * bw, (h - v) / 2, Math.max(1, bw - 0.6), v);
+    }
+  } else {
+    g.fillStyle = off; g.fillRect(0, h / 2 - 2, w, 4);
+    g.fillStyle = on; g.fillRect(0, h / 2 - 2, w * prog, 4);
+  }
+}
+const fmtT = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
+// One interface over every player: 30s preview (<audio>), YouTube, Spotify, SoundCloud, Deezer widget
+let eng = null, engName = '', engNote = '';
+const audioEng = {kind: 'preview', toggle(){ audio.paused ? audio.play() : audio.pause(); }, seek(t){ audio.currentTime = t; },
+  pos: () => audio.currentTime || 0, dur: () => audio.duration || 0, paused: () => audio.paused, stop(){ audio.pause(); }};
+audio.onended = () => { if (eng === audioEng) playIndex(qi + 1); };
+// Deezer preview links expire after a while: fetch a fresh one once
+audio.onerror = async () => {
+  if (eng !== audioEng) return;
+  const it = queue[qi]; if (!it || it.refreshed || !it.dzTrackId) return;
+  it.refreshed = true;
+  try { const tr = await dz('/track/' + it.dzTrackId, {}, 0); if (tr && tr.preview){ it.preview = tr.preview; playPreview(it, qi); } } catch(e){}
+};
+$('#wave').onclick = e => { if (!eng || !eng.dur()) return; const r = e.target.getBoundingClientRect(); eng.seek((e.clientX - r.left) / r.width * eng.dur()); drawWave(); };
+$('#plBtn').onclick = () => eng && eng.toggle();
+$('#plNext').onclick = () => playIndex(qi + 1);
+$('#plSrc').value = state.playerPref || 'auto';
+$('#plSrc').onchange = () => { state.playerPref = $('#plSrc').value; save(); if (queue[qi]) playIndex(qi); };
+window.addEventListener('resize', drawWave);
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select') || !$('#player').classList.contains('on') || !eng) return;
+  const step = e.shiftKey ? 30 : 10;
+  if (e.code === 'Space'){ e.preventDefault(); eng.toggle(); }
+  else if (e.key === 'ArrowRight'){ e.preventDefault(); eng.seek(Math.min(eng.dur() - 1, eng.pos() + step)); }
+  else if (e.key === 'ArrowLeft'){ e.preventDefault(); eng.seek(Math.max(0, eng.pos() - step)); }
+  else if (/^[1-9]$/.test(e.key) && eng.dur()){ eng.seek(eng.dur() * +e.key / 10); }
+  else if (e.key === 'n' || e.key === 'N') playIndex(qi + 1);
+  else if (e.key === 'p' || e.key === 'P') playIndex(qi - 1);
+});
+setInterval(() => {
+  if (!eng || !$('#player').classList.contains('on')) return;
+  $('#plBtn').textContent = eng.paused() ? '▶' : '❚❚';
+  if (eng.kind !== 'preview'){
+    drawWave();
+    $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName;
+  } else {
+    drawWave();
+    $('#plInfo').textContent = fmtT(audio.currentTime) + ' / ' + fmtT(audio.duration) + ' · preview' + (engNote ? ' (' + engNote + ')' : '');
+  }
+}, 250);
+
+function drawWave(){
+  const cv = $('#wave'), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  if (cv.width !== w * dpr){ cv.width = w * dpr; cv.height = h * dpr; }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const prog = eng && eng.dur() ? eng.pos() / eng.dur() : 0;
+  const css = getComputedStyle(document.documentElement);
+  const on = css.getPropertyValue('--accent').trim(), off = '#4a4f55';
+  if (peaks && eng && (eng === audioEng || eng.kind === 'spotify' || eng.kind === 'soundcloud')){
+    const bw = w / peaks.length;
+    for (let i = 0; i < peaks.length; i++){
+      const v = Math.max(0.03, peaks[i]) * (h - 6);
+      g.fillStyle = i / peaks.length < prog ? on : off;
+      g.fillRect(i * bw, (h - v) / 2, Math.max(1, bw - 0.6), v);
+    }
+  } else {
+    // full track: timeline with 10% marks, click or press 1-9 to jump
+    g.fillStyle = off; g.fillRect(0, h / 2 - 3, w, 6);
+    g.fillStyle = on; g.fillRect(0, h / 2 - 3, w * prog, 6);
+    g.fillStyle = '#6a7077';
+    for (let k = 1; k < 10; k++) g.fillRect(Math.round(w * k / 10), h / 2 - 9, 1, 18);
+    g.fillStyle = on; g.beginPath(); g.arc(w * prog, h / 2, 7, 0, Math.PI * 2); g.fill();
+  }
+}
+
+/* --- Spotify account (PKCE login, no client secret needed) --- */
+const SP_REDIRECT = location.origin + location.pathname;
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function spLogin(){
+  const id = ($('#spClient').value || '').trim();
+  if (!/^[0-9a-f]{32}$/i.test(id)) return $('#spMsg').innerHTML = '<span class="bad">Dit lijkt geen Client ID (32 tekens, letters a–f en cijfers).</span>';
+  if (!/^https?:$/.test(location.protocol)) return $('#spMsg').innerHTML = '<span class="bad">Start de app via "Start Digging Tool.command", Spotify werkt niet in een los geopend bestand.</span>';
+  state.spClient = id; save();
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  sessionStorage.setItem('sp_verifier', verifier);
+  const q = new URLSearchParams({response_type: 'code', client_id: id, redirect_uri: SP_REDIRECT, code_challenge_method: 'S256', code_challenge: challenge,
+    scope: 'playlist-modify-private playlist-modify-public user-read-private'});
+  location.href = 'https://accounts.spotify.com/authorize?' + q;
+}
+async function spTokenRequest(params){
+  const r = await fetch('https://accounts.spotify.com/api/token', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams(params)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Spotify: ' + (j.error_description || j.error || r.status));
+  state.sp = {access: j.access_token, refresh: j.refresh_token || (state.sp || {}).refresh, exp: Date.now() + (j.expires_in - 60) * 1000};
+  save();
+}
+async function spHandleRedirect(){
+  const u = new URL(location.href), code = u.searchParams.get('code'), err = u.searchParams.get('error');
+  if (!code && !err) return;
+  history.replaceState(null, '', location.pathname);
+  if (err){ showTab('settings'); $('#spMsg').innerHTML = `<span class="bad">Spotify gaf een fout: ${esc(err)}</span>`; return; }
+  try {
+    await spTokenRequest({grant_type: 'authorization_code', code, redirect_uri: SP_REDIRECT, client_id: state.spClient, code_verifier: sessionStorage.getItem('sp_verifier') || ''});
+    const me = await spWeb('/me');
+    state.spUser = {id: me.id, name: me.display_name || me.id, premium: me.product === 'premium'}; save();
+    showTab('settings'); spStatus();
+  } catch(e){ showTab('settings'); $('#spMsg').innerHTML = `<span class="bad">${esc(e.message)}</span><br><span class="muted">Check of de Redirect URI in je Spotify-app precies ${esc(SP_REDIRECT)} is.</span>`; }
+}
+async function spWeb(path, opts = {}){
+  if (!state.sp) throw new Error('Niet verbonden met Spotify');
+  if (Date.now() > state.sp.exp && state.sp.refresh) await spTokenRequest({grant_type: 'refresh_token', refresh_token: state.sp.refresh, client_id: state.spClient});
+  const r = await fetch('https://api.spotify.com/v1' + path, Object.assign({}, opts, {headers: Object.assign({Authorization: 'Bearer ' + state.sp.access}, opts.body ? {'Content-Type': 'application/json'} : {})}));
+  if (r.status === 429){ await sleep(((+r.headers.get('Retry-After')) || 2) * 1000); return spWeb(path, opts); }
+  if (r.status === 401 && state.sp.refresh && !opts._retry){ state.sp.exp = 0; return spWeb(path, Object.assign({}, opts, {_retry: true})); }
+  const j = r.status === 204 ? {} : await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error('Spotify: ' + ((j.error && j.error.message) || r.status)), {status: r.status});
+  return j;
+}
+const spConnected = () => !!(state.sp && state.sp.refresh);
+function spStatus(){
+  $('#spRedir').textContent = SP_REDIRECT;
+  $('#spClient').value = state.spClient || '';
+  if (spConnected()) $('#spMsg').innerHTML = `<span class="ok">Verbonden als ${esc((state.spUser || {}).name || '')}${state.spUser && !state.spUser.premium ? ' (geen Premium: Spotify speelt dan alleen fragmenten, de app gebruikt dan YouTube)' : ''}.</span> <a href="#" id="spOff">Ontkoppel</a>`;
+}
+document.addEventListener('click', e => { const g = e.target.closest('#goSp'); if (g){ e.preventDefault(); showTab('settings'); $('#spCard').scrollIntoView({behavior: 'smooth'}); $('#spClient').focus(); } });
+document.addEventListener('click', e => { if (e.target.id === 'spOff'){ e.preventDefault(); state.sp = null; state.spUser = null; save(); $('#spMsg').textContent = 'Ontkoppeld.'; } });
+$('#spConnect').onclick = spLogin;
+// find a track on Spotify by artist + title
+async function spSearch(artist, title){
+  if (!spConnected()) return null;
+  const a1 = splitArtists(artist)[0] || artist, t = cleanTitle(title);
+  const key = 'sps:' + norm(a1) + '|' + titleCore(title), hit = await idb.get(key);
+  if (hit && Date.now() - hit.t < 60 * 864e5) return hit.d;
+  let found = null;
+  for (const q of [`track:${t} artist:${a1}`, `${a1} ${t}`]){
+    try {
+      const d = await spWeb('/search?type=track&limit=10&q=' + encodeURIComponent(q));
+      const items = (d.tracks && d.tracks.items) || [];
+      const ok = x => x.artists.some(a => artistMatch(a.name, a1)) && titleMatch(x.name, t);
+      // prefer the same version (remix/mix name) when the title has one
+      const full = titleCore(title);
+      const v = items.find(x => ok(x) && titleCore(x.name.replace(/ - /g, ' ')) === full) || items.find(ok);
+      if (v){ found = v.uri; break; }
+    } catch(e){ if (e.status === 401 || e.status === 403) break; }
+  }
+  idb.set(key, {t: Date.now(), d: found});
+  return found;
+}
+
+/* --- full-length players --- */
+// song.link turns a Deezer track into Spotify / YouTube / SoundCloud links (free, ~10 lookups per minute)
+async function fullLinks(it){
+  let id = it.dzTrackId;
+  if (!id){ try { const pv = await findPreview(it.artist, it.title); const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; } catch(e){} }
+  const out = {deezer: id || null};
+  if (!id){ out.sl = 'overgeslagen (niet op Deezer)'; if (spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; } if (!out.spotify){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; } out.diag = diagOf(out); return out; }
+  const key = 'sl:' + id, hit = await idb.get(key);
+  if (hit && Date.now() - hit.t < 30 * 864e5 && hit.d.youtube){ if (!Array.isArray(hit.d.youtube)) hit.d.youtube = [hit.d.youtube]; return hit.d; }
+  try {
+    const r = await fetch('https://api.song.link/v1-alpha.1/links?userCountry=NL&url=' + encodeURIComponent('https://www.deezer.com/track/' + id));
+    out.sl = r.ok ? 'ok' : r.status === 429 ? 'limiet' : 'HTTP ' + r.status;
+    if (r.ok){
+      const L = (await r.json()).linksByPlatform || {};
+      const sp = (L.spotify || {}).url, yt = (L.youtube || L.youtubeMusic || {}).url, sc = (L.soundcloud || {}).url;
+      let m;
+      if (sp && (m = sp.match(/track\/(\w+)/))) out.spotify = 'spotify:track:' + m[1];
+      if (yt && (m = yt.match(/[?&]v=([\w-]{11})/))) out.youtube = [m[1]];
+      if (sc) out.soundcloud = sc;
+    }
+  } catch(e){ out.sl = 'niet bereikbaar'; }
+  if (!out.spotify && spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; }
+  if (!out.youtube && !(out.spotify && spConnected() && (state.spUser || {}).premium)){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; }
+  out.diag = diagOf(out);
+  if (out.youtube || out.spotify) idb.set(key, {t: Date.now(), d: out});
+  return out;
+}
+function diagOf(o){
+  return [
+    'song.link: ' + (o.sl || 'ok'),
+    'Spotify: ' + (o.spotify ? 'gevonden' : spConnected() ? 'niet gevonden' : 'niet verbonden (Instellingen)'),
+    'YouTube: ' + (o.youtube ? 'gevonden' + (o.ytVia ? ' via ' + o.ytVia : '') : o.ytTried ? 'niets gevonden' + (state.ytKey ? '' : ' (geen YouTube-sleutel)') : 'niet gezocht'),
+    'SoundCloud: ' + (o.soundcloud ? 'gevonden' : 'niet gevonden'),
+  ].join(' · ');
+}
+// Find a YouTube video without song.link: own YouTube API key (most reliable), else public Piped / Invidious mirrors
+const PIPED = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de', 'https://api.piped.private.coffee'];
+const INVID = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://yewtu.be', 'https://invidious.privacyredirect.com'];
+async function fetchJSON(url, ms = 5000){
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), ms);
+  try { const r = await fetch(url, {signal: ac.signal}); return r.ok ? await r.json() : null; } catch(e){ return null; } finally { clearTimeout(to); }
+}
+async function ytSearch(artist, title){
+  const a1 = splitArtists(artist)[0] || artist, t = cleanTitle(title);
+  const key = 'yts:' + norm(a1) + '|' + titleCore(t), hit = await idb.get(key);
+  if (hit && Date.now() - hit.t < 60 * 864e5) return hit.d;
+  const q = a1 + ' ' + t;
+  const good = (vt, ch) => { const x = ' ' + titleCore(vt) + ' ' + norm(ch) + ' '; return x.includes(titleCore(t)) && (x.includes(' ' + norm(a1) + ' ') || x.includes(norm(a1))); };
+  let found = null;
+  if (state.ytKey){
+    const d = await fetchJSON('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&videoEmbeddable=true&q=' + encodeURIComponent(q) + '&key=' + encodeURIComponent(state.ytKey));
+    const vs = d ? (d.items || []).filter(x => good(x.snippet.title, x.snippet.channelTitle)).map(x => x.id.videoId) : [];
+    if (vs.length) found = {ids: vs.slice(0, 4), via: 'YouTube API'};
+  }
+  for (const base of PIPED){
+    if (found) break;
+    const d = await fetchJSON(base + '/search?filter=videos&q=' + encodeURIComponent(q));
+    const vs = d ? (d.items || []).filter(x => x.url && good(x.title, x.uploaderName)).map(x => (x.url.match(/v=([\w-]{11})/) || [])[1]).filter(Boolean) : [];
+    if (vs.length) found = {ids: vs.slice(0, 4), via: 'Piped'};
+  }
+  for (const base of INVID){
+    if (found) break;
+    const d = await fetchJSON(base + '/api/v1/search?type=video&q=' + encodeURIComponent(q));
+    const vs = Array.isArray(d) ? d.filter(x => x.videoId && good(x.title, x.author)).map(x => x.videoId) : [];
+    if (vs.length) found = {ids: vs.slice(0, 4), via: 'Invidious'};
+  }
+  if (found){ found.id = found.ids[0]; idb.set(key, {t: Date.now(), d: found}); }
+  return found;
+}
+function loadScript(src, readyName){
+  return new Promise((res, rej) => {
+    if (readyName){ const prev = window[readyName]; window[readyName] = a => { if (prev) try { prev(a); } catch(e){} res(a); }; }
+    const s = document.createElement('script'); s.src = src; s.onerror = () => rej(new Error('kon ' + src + ' niet laden'));
+    if (!readyName) s.onload = () => res();
+    document.head.appendChild(s);
+  });
+}
+function showEmbed(which){
+  if (which) $('#plDiag').textContent = '';
+  ['ytWrap', 'spWrap', 'dzFrame', 'scFrame'].forEach(id => $('#' + id).hidden = id !== which);
+  document.body.classList.toggle('full', !!which);
+}
+function stopAll(){
+  try { audio.pause(); } catch(e){}
+  try { ytP && ytP.pauseVideo && ytP.pauseVideo(); } catch(e){}
+  try { spCtl && spCtl.pause(); } catch(e){}
+  if (!$('#dzFrame').hidden) $('#dzFrame').src = 'about:blank';
+  try { scW && scW.pause(); } catch(e){}
+}
+let srcList = [], srcIdx = 0, playToken = 0, lastLinks = {};
+function nextSource(token){ if (token !== playToken) return; srcIdx++; startNextSource(token); }
+
+// YouTube
+let ytP = null, ytApi = null, ytToken = 0, ytIds = [], ytI = 0, ytErr = '';
+const YT_ERR = {2: 'ongeldige video', 5: 'HTML5-fout', 100: 'video verwijderd', 101: 'eigenaar staat insluiten niet toe', 150: 'eigenaar staat insluiten niet toe', 153: 'speler kreeg geen adres mee'};
+function ytFailed(code){
+  ytErr = 'YouTube-fout ' + code + (YT_ERR[code] ? ' (' + YT_ERR[code] + ')' : '');
+  if (ytToken !== playToken) return;
+  if (++ytI < ytIds.length){ ytP.loadVideoById(ytIds[ytI]); return; }   // try the next matching video
+  lastLinks.diag = (lastLinks.diag || '') + ' · ' + ytErr;
+  nextSource(ytToken);
+}
+async function playYouTube(ids, token){
+  ytIds = Array.isArray(ids) ? ids : [ids]; ytI = 0; ytErr = '';
+  ytToken = token;
+  if (!ytApi) ytApi = Promise.race([loadScript('https://www.youtube.com/iframe_api', 'onYouTubeIframeAPIReady'), new Promise((_, rej) => setTimeout(() => rej(new Error('YouTube-speler laadt niet')), 8000))]);
+  try { await ytApi; }
+  catch(e){
+    // the API script is blocked (e.g. by an ad blocker): plain embed, which still plays the whole track
+    ytApi = null;
+    showEmbed('ytWrap');
+    $('#ytBox').outerHTML = `<iframe id="ytBox" width="240" height="135" src="https://www.youtube.com/embed/${ytIds[0]}?autoplay=1&playsinline=1&rel=0&origin=${encodeURIComponent(location.origin)}" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" frameborder="0"></iframe>`;
+    engName = 'YouTube (eenvoudige speler: bediening in de video)';
+    eng = {kind: 'youtube', toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ const f = $('#ytBox'); if (f && f.tagName === 'IFRAME') f.src = 'about:blank'; }};
+    return;
+  }
+  showEmbed('ytWrap');
+  if (!ytP || !ytP.loadVideoById){
+    if ($('#ytBox').tagName === 'IFRAME') $('#ytBox').outerHTML = '<div id="ytBox"></div>';
+    await new Promise(res => {
+      ytP = new YT.Player('ytBox', {width: 240, height: 135, videoId: ytIds[0],
+        playerVars: {autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin, widget_referrer: location.href},
+        events: {
+          onReady: () => { ytP.playVideo(); res(); },
+          onStateChange: e => { if (e.data === 0 && ytToken === playToken) playIndex(qi + 1); },
+          onError: e => ytFailed(e.data),
+        }});
+    });
+  } else ytP.loadVideoById(ytIds[0]);
+  engName = 'YouTube' + (lastLinks.ytVia ? ' (via ' + lastLinks.ytVia + ')' : '');
+  eng = {kind: 'youtube', toggle(){ ytP.getPlayerState() === 1 ? ytP.pauseVideo() : ytP.playVideo(); }, seek(t){ ytP.seekTo(t, true); },
+    pos: () => (ytP.getCurrentTime && ytP.getCurrentTime()) || 0, dur: () => (ytP.getDuration && ytP.getDuration()) || 0,
+    paused: () => !ytP.getPlayerState || ytP.getPlayerState() !== 1, stop(){ ytP.pauseVideo(); }};
+}
+// Spotify (full tracks when you're logged in to Spotify Premium in this browser, otherwise a preview)
+let spCtl = null, spApi = null, spSt = {position: 0, duration: 0, isPaused: true}, spLast = 0, spToken = 0;
+async function playSpotify(uri, token){
+  spApi = spApi || loadScript('https://open.spotify.com/embed/iframe-api/v1', 'onSpotifyIframeApiReady');
+  const api = await spApi;
+  spToken = token;
+  showEmbed('spWrap');
+  if (!spCtl){
+    await new Promise(res => api.createController($('#spBox'), {uri, width: '100%', height: 80}, c => {
+      spCtl = c;
+      c.addListener('playback_update', e => {
+        const d = e.data; spSt = {position: d.position / 1000, duration: d.duration / 1000, isPaused: d.isPaused};
+        if (d.isPaused && spLast > 0 && d.duration && spLast >= d.duration / 1000 - 2 && spToken === playToken){ spLast = 0; playIndex(qi + 1); return; }
+        spLast = spSt.position;
+      });
+      c.addListener('ready', () => { c.play(); res(); });
+    }));
+  } else { spLast = 0; spCtl.loadUri(uri); setTimeout(() => spCtl.play(), 400); }
+  engName = 'Spotify';
+  spWave(uri, token);
+  eng = {kind: 'spotify', toggle(){ spCtl.togglePlay(); }, seek(t){ spCtl.seek(t); }, pos: () => spSt.position, dur: () => spSt.duration, paused: () => spSt.isPaused, stop(){ spCtl.pause(); }};
+}
+// Full-track waveform from Spotify's audio analysis (loudness per segment). Spotify closed this
+// endpoint for apps created after Nov 2024, so this only works for older apps; otherwise we show a timeline.
+async function spWave(uri, token){
+  if (!spConnected() || state.spNoAnalysis) return;
+  const id = uri.split(':').pop(), key = 'spa:' + id;
+  let p = (await idb.get(key) || {}).d;
+  if (!p){
+    try {
+      const a = await spWeb('/audio-analysis/' + id);
+      const dur = a.track && a.track.duration, segs = a.segments || [];
+      if (!dur || !segs.length) return;
+      const N = 400; p = new Array(N).fill(0);
+      segs.forEach(sg => { const i = Math.min(N - 1, Math.floor(sg.start / dur * N)); const amp = Math.pow(10, (sg.loudness_max || -60) / 20); if (amp > p[i]) p[i] = amp; });
+      for (let i = 1; i < N; i++) if (!p[i]) p[i] = p[i - 1];
+      const mx = Math.max(...p) || 1; p = p.map(v => v / mx);
+      idb.set(key, {t: Date.now(), d: p});
+    } catch(e){ if (e.status === 403 || e.status === 404) { state.spNoAnalysis = true; save(); } return; }
+  }
+  if (token === playToken){ peaks = Float32Array.from(p); drawWave(); }
+}
+// SoundCloud publishes the full-track waveform of every sound: draw that in our own bar
+async function scWave(snd, token){
+  const url = snd && snd.waveform_url; if (!url) return;
+  let p = null;
+  try {
+    const d = await fetchJSON(url.replace(/\.png($|\?)/, '.json$1'));
+    if (d && d.samples && d.samples.length){ const mx = d.height || Math.max(...d.samples) || 1; p = d.samples.map(v => v / mx); }
+  } catch(e){}
+  if (!p){
+    // fall back to the PNG: read its column heights
+    p = await new Promise(res => {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => { try {
+        const W = 400, H = 60, c = document.createElement('canvas'); c.width = W; c.height = H;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, W, H);
+        const px = g.getImageData(0, 0, W, H).data, out = [];
+        for (let x = 0; x < W; x++){ let n = 0; for (let y = 0; y < H / 2; y++) if (px[(y * W + x) * 4 + 3] < 128) n++; out.push(n / (H / 2)); }
+        res(out);
+      } catch(e){ res(null); } };
+      img.onerror = () => res(null); img.src = url;
+    });
+  }
+  if (p && token === playToken){
+    const N = 400, out = new Float32Array(N);
+    for (let i = 0; i < N; i++) out[i] = p[Math.floor(i / N * p.length)];
+    peaks = out; drawWave();
+  }
+}
+// SoundCloud
+let scW = null, scApi = null, scSt = {pos: 0, dur: 0, paused: true}, scToken = 0;
+async function playSoundCloud(url, token){
+  scApi = scApi || loadScript('https://w.soundcloud.com/player/api.js');
+  await scApi;
+  scToken = token;
+  showEmbed('scFrame');
+  const fr = $('#scFrame');
+  fr.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(url) + '&auto_play=true&visual=false&show_comments=false&hide_related=true&color=%23c8f04a';
+  scW = SC.Widget(fr);
+  scW.bind(SC.Widget.Events.READY, () => { scW.play(); scW.getDuration(d => scSt.dur = d / 1000); scW.getCurrentSound(snd => {
+    if (snd && (snd.policy === 'SNIP' || (snd.full_duration && snd.duration && snd.duration < snd.full_duration - 2000))){ nextSource(token); return; }
+    scWave(snd, token);
+  }); });
+  scW.bind(SC.Widget.Events.PLAY_PROGRESS, e => { scSt.pos = e.currentPosition / 1000; scSt.paused = false; });
+  scW.bind(SC.Widget.Events.PAUSE, () => scSt.paused = true);
+  scW.bind(SC.Widget.Events.FINISH, () => { if (scToken === playToken) playIndex(qi + 1); });
+  scW.bind(SC.Widget.Events.ERROR, () => nextSource(scToken));
+  engName = 'SoundCloud';
+  eng = {kind: 'soundcloud', toggle(){ scW.toggle(); }, seek(t){ scW.seekTo(t * 1000); }, pos: () => scSt.pos, dur: () => scSt.dur, paused: () => scSt.paused, stop(){ scW.pause(); }};
+}
+// Deezer widget (full tracks when logged in to Deezer in this browser). No remote control API, use its own buttons.
+function playDeezer(id){
+  showEmbed('dzFrame');
+  $('#dzFrame').src = 'https://widget.deezer.com/widget/dark/track/' + id + '?autoplay=true&tracklist=false';
+  engName = 'Deezer (bediening in de Deezer-speler)';
+  eng = {kind: 'deezer', toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ $('#dzFrame').src = 'about:blank'; }};
+}
+async function startNextSource(token){
+  const it = queue[qi];
+  while (srcIdx < srcList.length){
+    const [src, val] = srcList[srcIdx];
+    try {
+      if (src === 'youtube') await playYouTube(val, token);
+      else if (src === 'spotify') await playSpotify(val, token);
+      else if (src === 'soundcloud') await playSoundCloud(val, token);
+      else if (src === 'deezer') playDeezer(val);
+      return;
+    } catch(e){ console.warn(src, e); srcIdx++; }
+  }
+  if (token === playToken) playPreview(it, qi, 'volledige versie kon niet spelen', (lastLinks.diag || '') + ' · afspelen mislukt');
+}
+
+// queue items: {artist, title, preview?, dzTrackId?}
+function playQueue(items, start = 0){ queue = items; playIndex(start); }
+async function playIndex(i){
+  if (i < 0 || i >= queue.length) return;
+  qi = i;
+  const token = ++playToken;
+  const it = queue[i];
+  stopAll();
+  $('#player').classList.add('on');
+  $('#plTitle').textContent = it.artist + ' – ' + it.title;
+  peaks = null; eng = null; drawWave();
+  const pref = state.playerPref || 'auto';
+  if (pref !== 'preview'){
+    $('#plInfo').textContent = 'Volledige track zoeken…';
+    const L = await fullLinks(it);
+    if (token !== playToken) return;
+    // Deezer's widget only works when logged in to Deezer, so it's only used when chosen explicitly
+    const autoFirst = spConnected() && (state.spUser || {}).premium ? 'spotify' : 'youtube';
+    const order = pref === 'deezer' ? ['deezer', 'youtube', 'spotify', 'soundcloud']
+      : pref === 'auto' ? [...new Set(['soundcloud', autoFirst, 'youtube', 'spotify'])]
+      : [...new Set([pref, autoFirst, 'youtube', 'spotify', 'soundcloud'])];
+    srcList = order.filter(k => L[k]).map(k => [k, L[k]]); srcIdx = 0;
+    lastLinks = L;
+    if (srcList.length){ startNextSource(token); return; }
+    playPreview(it, i, 'geen volledige versie gevonden', L.diag || diagOf(L));
+    return;
+  }
+  playPreview(it, i, '');
+}
+async function playPreview(it, i, note, diag){
+  showEmbed(null);
+  engNote = note || '';
+  if (diag){
+    const q = encodeURIComponent(it.artist + ' ' + cleanTitle(it.title));
+    const yt = lastLinks.youtube && lastLinks.youtube[0] ? 'https://www.youtube.com/watch?v=' + lastLinks.youtube[0] : 'https://www.youtube.com/results?search_query=' + q;
+    $('#plDiag').innerHTML = 'Waarom preview? ' + esc(diag) + `<br>Volledige track: <a href="${yt}" target="_blank" rel="noopener">open op YouTube</a> · <a href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">open in Spotify</a>`
+      + (spConnected() ? '' : ' · <a href="#" id="goSp"><b>Verbind Spotify</b> voor volledige tracks in de app</a>');
+  } else $('#plDiag').textContent = '';
+  $('#plInfo').textContent = note || 'Preview zoeken…';
+  let pv = it.preview ? {preview: it.preview} : await findPreview(it.artist, it.title);
+  if (qi !== i) return;
+  if (!pv.preview){
+    $('#plInfo').innerHTML = 'Niets gevonden om af te spelen. <a href="https://www.youtube.com/results?search_query=' + encodeURIComponent(it.artist + ' ' + it.title) + '" target="_blank" rel="noopener">Zoek op YouTube</a>';
+    if (queue.length > 1 && i < queue.length - 1) setTimeout(() => { if (qi === i) playIndex(i + 1); }, 2000);
+    return;
+  }
+  eng = audioEng; engName = 'preview';
+  audio.src = pv.preview;
+  audio.play().catch(() => {});
+  computePeaks(pv.preview).then(p => { if (qi === i && eng === audioEng){ peaks = p; drawWave(); } }).catch(() => {});
+}
+
+/* ================= UI ================= */
+function setStatus(t){ $('#status').textContent = t; }
+function makeProg(bar, msg){
+  const b = $(bar), m = $(msg); b.hidden = false;
+  return (f, t) => { b.firstElementChild.style.width = Math.round(f * 100) + '%'; m.textContent = t || ''; if (f >= 1) setTimeout(() => b.hidden = true, 400); };
+}
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(t){
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
+  if (t === 'profile') renderProfile();
+  if (t === 'likes') renderLikes();
+  if (t === 'playlists') renderPlaylists();
+  if (t === 'sets'){ renderSets(); queueEnergy(state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean)); }
+}
+
+function links(c){
+  return storeLinks(c.artists.map(x => x.name).join(' '), c.source === 'deezer' ? cleanTitle(c.title) : c.releaseTitle);
+}
+function recHTML(c, i, ctx){
+  const img = c.thumb ? `<img src="${esc(c.thumb)}" loading="lazy" alt="">` : '<div class="ph"></div>';
+  const lab = c.labels.map(l => esc(l.name)).join(', ');
+  return `<div class="rec" data-i="${i}" data-ctx="${ctx}">
+    <div style="position:relative">${img}<button class="play" data-act="playrel" style="position:absolute;right:4px;bottom:4px" title="${c.source === 'deezer' ? 'Speel preview, daarna de volgende aanbevelingen' : 'Speel previews van deze release'}">▶</button></div>
+    <div>
+      <div><span class="a">${esc(c.artists.map(a => a.name).join(', '))}</span> – <span class="t">${esc(c.source === 'deezer' ? c.title : c.releaseTitle)}</span></div>
+      <div class="small muted">${c.source === 'deezer' && c.releaseTitle ? 'van ' + esc(c.releaseTitle) + (lab ? ' · ' : '') : ''}${lab}${c.catno ? ' · ' + esc(c.catno) : ''}${c.year ? ' · ' + c.year : ''}${c.format ? ' · ' + esc(c.format) : ''}${c.want ? ' · ♥ ' + c.want : ''}</div>
+      <div>${c.fitWhy && c.fitWhy.length && c.fit >= 1.2 ? `<span class="chip fit">Past: ${esc(c.fitWhy.join(' · '))}</span>` : ''}${enBadge(c)} ${typeChips(c)}${(c.why || []).map(w => `<span class="chip why">${esc(w)}</span>`).join('')}${(c.styles || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>
+      <div class="small" style="margin-top:4px"><a href="${esc(c.uri)}" target="_blank" rel="noopener">${c.source === 'deezer' ? 'Deezer' : 'Discogs'}</a> · ${links(c)} · <a href="#" data-act="tracks">Tracklist</a> <span class="availslot" data-rid="${c.releaseId}"></span></div>
+      <div class="tl" hidden></div>
+      <div class="isim" hidden></div>
+    </div>
+    <div class="acts">
+      ${c.score != null ? `<div class="score">${Math.round(c.score * 100)}</div>` : ''}
+      ${ctx === 'likes' ? '<button class="btn small" data-act="unlike">Verwijder</button>' : '<button class="btn small" data-act="like">♥ Like</button><button class="btn small" data-act="skip">Skip</button>'}
+      <button class="btn small" data-act="inlinesim">≈ Vergelijkbaar</button>
+      <button class="btn small" data-act="similar">Similar</button>
+      <button class="btn small" data-act="addpl">+ Playlist</button>
+    </div>
+  </div>`;
+}
+const inlineLists = {};
+let inlineN = 0;
+const ctxLists = new Proxy({recs: () => state.lastRecs, sim: () => simList, likes: () => state.likes}, {
+  get: (o, k) => o[k] || (() => inlineLists[k] || []),
+});
+let simList = [];
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const row = b.closest('.rec'); if (!row) return;
+  e.preventDefault();
+  const c = ctxLists[row.dataset.ctx]()[+row.dataset.i];
+  if (!c) return;
+  const act = b.dataset.act;
+  if (act === 'like'){ if (!state.likes.some(l => l.releaseId === c.releaseId)) state.likes.unshift(strip(c)); save(); b.textContent = '♥ Geliked'; b.disabled = true; }
+  if (act === 'skip'){ state.skips.push({releaseId: c.releaseId, masterId: c.masterId, artists: c.artists, releaseTitle: c.releaseTitle}); save(); row.style.opacity = .3; }
+  if (act === 'unlike'){ state.likes = state.likes.filter(l => l.releaseId !== c.releaseId); save(); renderLikes(); }
+  if (act === 'similar') openSimilar(c);
+  if (act === 'inlinesim') toggleInlineSimilar(row, c, b);
+  if (act === 'addpl') openPlMenu(b, c);
+  if (act === 'tracks') toggleTracks(row, c);
+  if (act === 'playrel'){
+    if (c.source === 'deezer'){
+      const list = ctxLists[row.dataset.ctx]();
+      const items = list.map((x, j) => ({x, j})).filter(o => o.j >= +row.dataset.i && o.x.source === 'deezer')
+        .map(o => ({artist: o.x.artists.map(a => a.name).join(', '), title: o.x.title, preview: o.x.preview, dzTrackId: o.x.dzTrackId}));
+      playQueue(items, 0);
+    } else playRelease(c);
+  }
+});
+async function playRelease(c){
+  try {
+    const rel = await getRelease(c.releaseId);
+    const tl = (rel && rel.tracklist || []).filter(t => t.type_ !== 'heading');
+    const items = tl.map(t => ({artist: (t.artists && t.artists.length ? t.artists : rel.artists || []).map(a => stripNum(a.name)).join(', '), title: t.title}));
+    if (items.length) playQueue(items, 0);
+  } catch(err){ alert(err.message); }
+}
+// fill in "digitaal beschikbaar" chips lazily, a few at a time
+async function fillAvailability(container, list){
+  const slots = [...container.querySelectorAll('.availslot')];
+  for (const slot of slots){
+    const c = list.find(x => String(x.releaseId) === slot.dataset.rid); if (!c) continue;
+    const av = c.source === 'deezer' ? {deezer: c.uri} : await digitalAvailability(c);
+    c.digital = av.deezer ? true : av.none ? false : null;
+    slot.innerHTML = av.deezer ? `<a class="chip avail" href="${esc(av.deezer)}" target="_blank" rel="noopener">digitaal ✓</a>` : av.none ? '<span class="chip noavail">alleen fysiek?</span>' : '';
+    applyDigitalFilter();
+  }
+}
+/* --- steering target --- */
+function target(){
+  const t = state.target || {types: []};
+  return {types: t.types || [], lo: +$('#enMin').value, hi: +$('#enMax').value};
+}
+const hasTarget = T => T.types.length || T.lo > 1 || T.hi < 5;
+function renderTypeChips(){
+  const T = state.target || {types: []};
+  $('#typeChips').innerHTML = TYPES.map(([k, n]) => `<button class="tchip${(T.types || []).includes(k) ? ' on' : ''}" data-tchip="${k}">${n}</button>`).join('');
+}
+$('#typeChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-tchip]'); if (!b) return;
+  const T = state.target || (state.target = {types: []});
+  const k = b.dataset.tchip;
+  T.types = T.types.includes(k) ? T.types.filter(x => x !== k) : T.types.concat(k);
+  save(); renderTypeChips(); applyDigitalFilter();
+});
+$('#preset').onchange = () => {
+  const v = $('#preset').value; if (!v) return;
+  const [types, lo, hi] = v.split('|');
+  state.target = {types: types ? types.split(',') : [], lo: +lo, hi: +hi};
+  $('#enMin').value = lo; $('#enMax').value = hi; save(); renderTypeChips(); applyDigitalFilter();
+  $('#preset').value = '';
+};
+// how well a measured track fits the target (1 = neutral)
+function fitOf(c, T){
+  const e = energyOf(c), ty = typesOf(c);
+  let f = 1; const why = [];
+  if (T.types.length){
+    if (!ty) f *= 0.8;
+    else if (ty.some(x => T.types.includes(x))){ f *= 1.4; why.push(ty.filter(x => T.types.includes(x)).map(typeName).join('/')); }
+    else f *= 0.35;
+  }
+  if (T.lo > 1 || T.hi < 5){
+    if (!e) f *= 0.8;
+    else if (e >= T.lo && e <= T.hi){ f *= 1.25; why.push('energie ' + e); }
+    else f *= Math.abs(e < T.lo ? T.lo - e : e - T.hi) === 1 ? 0.55 : 0.25;
+  }
+  return {f, why};
+}
+// measure several tracks at once (3 in parallel)
+async function measureMany(list, onStep){
+  let i = 0, done = 0;
+  const worker = async () => { while (i < list.length){ const c = list[i++]; try { await measureEnergy(c); } catch(e){} onStep && onStep(++done, list.length); } };
+  await Promise.all([worker(), worker(), worker()]);
+}
+
+function applyDigitalFilter(){
+  const only = $('#onlyDigital').checked;
+  const lo = +$('#enMin').value, hi = +$('#enMax').value;
+  document.querySelectorAll('#recList .rec, #simList .rec').forEach(r => {
+    const c = ctxLists[r.dataset.ctx]()[+r.dataset.i];
+    const e = c && energyOf(c);
+    const tt = (state.target || {}).types || [], ty = c && typesOf(c);
+    const hide = (only && c && c.digital === false) || (e && (e < lo || e > hi)) || (tt.length && ty && ty.length && !ty.some(x => tt.includes(x)));
+    r.style.display = hide ? 'none' : '';
+  });
+}
+$('#onlyDigital').onchange = applyDigitalFilter;
+$('#enMin').onchange = $('#enMax').onchange = () => { const T = state.target || (state.target = {types: []}); T.lo = +$('#enMin').value; T.hi = +$('#enMax').value; save(); applyDigitalFilter(); };
+renderTypeChips();
+if (state.target){ if (state.target.lo) $('#enMin').value = state.target.lo; if (state.target.hi) $('#enMax').value = state.target.hi; }
+function strip(c){ const {score, ...rest} = c; return rest; }
+
+async function toggleTracks(row, c){
+  const box = row.querySelector('.tl');
+  if (!box.hidden){ box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = '<span class="muted">Laden…</span>';
+  if (c.source === 'deezer'){
+    try {
+      const d = await dz('/album/' + c.dzAlbumId + '/tracks', {limit: 100}, 36e5);
+      const tl = d && d.data || [];
+      const items = tl.map(t => ({artist: t.artist.name, title: t.title, preview: t.preview, dzTrackId: t.id}));
+      box.innerHTML = tl.map((t, j) => `<div><button class="play" data-play="${j}" title="Preview met waveform">▶</button><span class="pos">${j + 1}</span>
+        <span class="grow">${esc(t.artist.name)} – ${esc(t.title)} <span class="muted">${fmtT(t.duration)}</span><br><span class="stores">${storeLinks(t.artist.name, cleanTitle(t.title), {deezer: t.link})}</span></span>
+        <a href="#" data-track="${j}">similar</a> <a href="#" data-addt="${j}">+ playlist</a></div>`).join('') || '<span class="muted">Geen tracklist</span>';
+      box.querySelectorAll('[data-addt]').forEach(a => a.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); const t = tl[+a.dataset.addt]; openPlMenu(a, Object.assign(fromDz(t), {releaseTitle: c.releaseTitle, labels: c.labels, thumb: c.thumb})); });
+      box.querySelectorAll('[data-play]').forEach(b => b.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); playQueue(items, +b.dataset.play); });
+      box.querySelectorAll('[data-track]').forEach(a => a.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); const t = tl[+a.dataset.track]; openSimilar(Object.assign(fromDz(t), {releaseTitle: c.releaseTitle, dzAlbumId: c.dzAlbumId})); });
+    } catch(err){ box.innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+    return;
+  }
+  try {
+    const rel = await getRelease(c.releaseId);
+    const tl = (rel && rel.tracklist || []).filter(t => t.type_ !== 'heading');
+    box.innerHTML = tl.map((t, j) => {
+      const ta = (t.artists && t.artists.length ? t.artists : rel.artists || []).map(a => stripNum(a.name)).join(', ');
+      const q = encodeURIComponent(ta + ' ' + t.title);
+      return `<div><button class="play" data-play="${j}" title="Preview met waveform">▶</button><span class="pos">${esc(t.position)}</span>
+        <span class="grow">${esc(ta)} – ${esc(t.title)}${t.duration ? ' <span class="muted">' + esc(t.duration) + '</span>' : ''}<br><span class="stores">${storeLinks(ta, t.title)}</span></span>
+        <a href="#" data-track="${j}">similar</a> <a href="#" data-addt="${j}">+ playlist</a></div>`;
+    }).join('') || '<span class="muted">Geen tracklist</span>';
+    box.querySelectorAll('[data-addt]').forEach(a => a.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); openPlMenu(a, releaseToItem(rel, {title: tl[+a.dataset.addt].title})); });
+    const items = tl.map(t => ({artist: (t.artists && t.artists.length ? t.artists : rel.artists || []).map(a => stripNum(a.name)).join(', '), title: t.title}));
+    box.querySelectorAll('[data-play]').forEach(b => b.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); playQueue(items, +b.dataset.play); });
+    box.querySelectorAll('[data-track]').forEach(a => a.onclick = ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const t = tl[+a.dataset.track];
+      openSimilar(releaseToItem(rel, {title: t.title}));
+    });
+  } catch(err){ box.innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+}
+
+async function toggleInlineSimilar(row, c, btn){
+  const box = row.querySelector(':scope > div > .isim');
+  if (!box.hidden){ box.hidden = true; btn.classList.remove('on'); return; }
+  box.hidden = false; btn.classList.add('on');
+  if (box.dataset.done) return;
+  box.innerHTML = '<div class="small muted">Vergelijkbare tracks zoeken…</div>';
+  try {
+    const list = (await similarTo(c, (f, t) => { if (f < 1) box.firstElementChild && (box.firstElementChild.textContent = 'Vergelijkbare tracks zoeken… ' + Math.round(f * 100) + '%'); })).slice(0, 6);
+    const key = 'isim' + (++inlineN); inlineLists[key] = list;
+    box.dataset.done = 1;
+    box.innerHTML = list.length ? `<div class="small muted" style="margin:6px 0 2px">Vergelijkbaar met deze track:</div>` + list.map((x, i) => recHTML(x, i, key)).join('')
+      + `<div class="small"><a href="#" data-act2="more">Meer vergelijkbare tracks →</a></div>` : '<div class="small muted">Niets gevonden.</div>';
+    const more = box.querySelector('[data-act2=more]'); if (more) more.onclick = ev => { ev.preventDefault(); openSimilar(c); };
+    fillAvailability(box, list); queueEnergy(list);
+  } catch(err){ box.innerHTML = `<span class="bad small">${esc(err.message)}</span>`; }
+}
+async function openSimilar(c){
+  $('#similarPanel').classList.add('on');
+  const who = c.artists.map(a => a.name).join(', ');
+  $('#simTitle').textContent = 'Lijkt op: ' + who + ' – ' + (c.title || c.releaseTitle);
+  $('#simList').innerHTML = '';
+  try {
+    simList = await similarTo(c);
+    $('#simList').innerHTML = simList.length ? simList.map((x, i) => recHTML(x, i, 'sim')).join('') : '<div class="empty">Niets gevonden.</div>';
+    fillAvailability($('#simList'), simList);
+    queueEnergy(simList);
+  } catch(err){ $('#simMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+}
+$('#simClose').onclick = () => $('#similarPanel').classList.remove('on');
+$('#similarPanel').onclick = e => { if (e.target.id === 'similarPanel') $('#similarPanel').classList.remove('on'); };
+
+$('#genBtn').onclick = async () => {
+  const btn = $('#genBtn'); btn.disabled = true;
+  try {
+    const recs = await generateRecs();
+    state.lastRecs = recs; save();
+    renderRecs();
+    $('#genMsg').textContent = `${recs.length} aanbevelingen van ${recs.meta.newArtists} nieuwe artiesten, uit een netwerk van ${recs.meta.network} verwante artiesten.`
+      + (recs.meta.fit ? (recs.meta.fit.fits ? ` Doel ${recs.meta.target}: ${recs.meta.fit.fits} van de ${recs.meta.fit.measured} beluisterde tracks passen, die staan bovenaan.` : ` Doel ${recs.meta.target}: geen van de ${recs.meta.fit.measured} beluisterde tracks paste. Probeer een ruimer doel, of pas energie/type van een paar tracks aan zodat de app leert wat jij bedoelt.`) : '');
+  } catch(err){ $('#genMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+  btn.disabled = false;
+};
+const SECTIONS = [
+  ['related', 'Nieuwe artiesten in jouw sound', 'Artiesten die je nog niet draait, gevonden via het netwerk van verwante artiesten rond je sets.'],
+  ['label', 'Nieuw op je labels', 'Andere artiesten op de labels die je het meest draait.'],
+  ['known', 'Meer van artiesten die je al draait', 'Tracks van je eigen artiesten die nog niet in je sets zitten.'],
+];
+function renderRecs(){
+  const R = state.lastRecs;
+  if (!R.length){ $('#recList').innerHTML = '<div class="empty">Importeer eerst een paar sets, en klik dan op "Genereer aanbevelingen".</div>'; return; }
+  const idx = R.map((c, i) => i);
+  $('#recList').innerHTML = SECTIONS.map(([key, title, sub]) => {
+    const ids = idx.filter(i => (R[i].section || 'related') === key);
+    if (!ids.length) return '';
+    return `<details class="card sect" open><summary><span class="st">${title}</span> <span class="muted small">${ids.length} tracks · ${new Set(ids.map(i => norm((R[i].artists[0] || {}).name))).size} artiesten</span><div class="small muted">${sub}</div></summary>
+      ${ids.map(i => recHTML(R[i], i, 'recs')).join('')}</details>`;
+  }).join('');
+  fillAvailability($('#recList'), state.lastRecs);
+  queueEnergy(state.lastRecs);
+}
+
+/* --- sets --- */
+$('#importBtn').onclick = async () => {
+  const lines = $('#setText').value.split('\n').map(parseLine).filter(Boolean);
+  if (!lines.length) return;
+  const forced = $('#setOrder').value;
+  if (forced) lines.forEach(p => Object.assign(p, {order: forced}, orient(p, forced)));
+  const set = {id: Date.now(), name: $('#setName').value.trim() || ('Set ' + (state.sets.length + 1)), tracks: lines.map(p => ({p, item: null, status: 'pending'}))};
+  const votes = {at: 0, ta: 0};
+  lines.forEach(p => { if (p.sure) votes[p.guess] += 0.5; });   // lines with obvious order set the starting preference
+  if (!forced){ const g = votes.at === votes.ta ? null : (votes.at > votes.ta ? 'at' : 'ta'); if (g) lines.forEach(p => { if (!p.sure){ p.guess = g; Object.assign(p, orient(p, g)); } }); }
+  const pref = () => votes.at === votes.ta ? undefined : (votes.at > votes.ta ? 'at' : 'ta');
+  state.sets.unshift(set); save();
+  $('#importBtn').disabled = true;
+  const prog = makeProg('#impProg', '#importMsg');
+  for (let i = 0; i < set.tracks.length; i++){
+    const t = set.tracks[i];
+    prog(i / set.tracks.length, `${i + 1}/${set.tracks.length}: ${t.p.artist} - ${t.p.title}`);
+    try {
+      t.item = await resolveTrack(t.p, pref()); t.status = t.item ? 'ok' : 'notfound';
+      if (t.item && !t.item.uncertain && t.p.resolvedOrder) votes[t.p.resolvedOrder]++;
+    }
+    catch(err){ t.status = 'error'; $('#importMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
+    save(); renderSets();
+  }
+  const ok = set.tracks.filter(t => t.item).length;
+  prog(1, `${ok} van ${set.tracks.length} tracks gevonden.`);
+  $('#importBtn').disabled = false; $('#setText').value = ''; $('#setName').value = '';
+  refreshStyleFilter();
+  queueEnergy(set.tracks.map(t => t.item).filter(Boolean));
+};
+function renderSets(){
+  $('#setList').innerHTML = state.sets.map(set => {
+    const ok = set.tracks.filter(t => t.item).length;
+    return `<div class="card" data-set="${set.id}">
+      <div class="row"><h2 class="grow" style="margin:0">${esc(set.name)}</h2><span class="small muted">${ok}/${set.tracks.length} gevonden</span>
+      <button class="btn small" data-setact="retry">Opnieuw zoeken (niet gevonden)</button><button class="btn small" data-setact="del">Verwijder set</button></div>
+      <table><tr><th></th><th>Uit je tracklist</th><th>Discogs-match</th><th></th></tr>
+      ${set.tracks.map((t, j) => `<tr data-t="${j}">
+        <td class="${t.item ? (t.item.uncertain ? 'warn' : 'ok') : t.status === 'pending' ? 'muted' : 'warn'}" title="${t.item && t.item.uncertain ? 'Onzekere match, check even' : ''}">${t.item ? (t.item.uncertain ? '◐' : '●') : t.status === 'pending' ? '…' : '○'}</td>
+        <td>${esc(t.p.artist)} – ${esc(t.p.title)}${t.p.label ? ' <span class="muted">[' + esc(t.p.label) + ']</span>' : ''}</td>
+        <td class="small">${t.item ? `<a href="${esc(t.item.uri)}" target="_blank" rel="noopener">${esc(t.item.artists.map(a => a.name).join(', '))} – ${esc(t.item.releaseTitle)}</a><br><span class="muted">${esc(t.item.labels.map(l => l.name + (l.catno ? ' ' + l.catno : '')).join(', '))}${t.item.year ? ' · ' + t.item.year : ''}</span>`
+          : t.status === 'pending' ? '' : '<span class="warn">Niet gevonden.</span> Plak een Deezer-track- of Discogs-release-link:'}
+          <div class="row" style="margin-top:4px"><input class="grow small" data-fix placeholder="deezer.com/track/… of discogs.com/release/…" style="padding:3px 6px;${t.item ? 'display:none' : ''}"></div></td>
+        <td style="white-space:nowrap">${t.item ? enBadge(t.item) + ' ' + typeChips(t.item) + ' <button class="btn small" data-tact="similar">Similar</button> <button class="btn small" data-tact="edit">Wijzig</button>' : ''}</td>
+      </tr>`).join('')}</table></div>`;
+  }).join('') || '<div class="empty">Nog geen sets.</div>';
+}
+$('#setList').addEventListener('click', async e => {
+  const card = e.target.closest('[data-set]'); if (!card) return;
+  const set = state.sets.find(s => s.id === +card.dataset.set);
+  const sa = e.target.dataset.setact, ta = e.target.dataset.tact;
+  if (sa === 'del' && confirm('Set "' + set.name + '" verwijderen?')){ state.sets = state.sets.filter(s => s !== set); save(); renderSets(); }
+  if (sa === 'retry'){
+    for (const t of set.tracks.filter(t => !t.item)){
+      try { t.item = await resolveTrack(t.p); t.status = t.item ? 'ok' : 'notfound'; } catch(err){ t.status = 'error'; }
+      save(); renderSets();
+    }
+  }
+  if (ta){
+    const t = set.tracks[+e.target.closest('tr').dataset.t];
+    if (ta === 'similar') openSimilar(t.item);
+    if (ta === 'edit'){ const inp = e.target.closest('tr').querySelector('[data-fix]'); inp.style.display = ''; inp.focus(); }
+  }
+});
+$('#setList').addEventListener('keydown', async e => {
+  if (!e.target.matches('[data-fix]') || e.key !== 'Enter') return;
+  const v = e.target.value;
+  const dm = v.match(/deezer\.com\/(?:[a-z]{2}\/)?track\/(\d+)/);
+  const m = v.match(/release\/(\d+)/) || v.match(/^\s*(\d+)\s*$/);
+  if (!m && !dm) { e.target.style.borderColor = 'var(--bad)'; return; }
+  const set = state.sets.find(s => s.id === +e.target.closest('[data-set]').dataset.set);
+  const t = set.tracks[+e.target.closest('tr').dataset.t];
+  try { t.item = dm ? await deezerTrackToItem(await dz('/track/' + dm[1])) : releaseToItem(await getRelease(+m[1]), t.p); t.status = t.item ? 'ok' : 'notfound'; save(); renderSets(); }
+  catch(err){ alert(err.message); }
+});
+
+/* --- playlists --- */
+function toast(t){ const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+const plTrack = c => ({artist: c.artists.map(a => a.name).join(', '), title: c.title || c.releaseTitle, releaseTitle: c.releaseTitle, labels: c.labels || [],
+  artists: c.artists, source: c.source, dzTrackId: c.dzTrackId, dzAlbumId: c.dzAlbumId, releaseId: c.releaseId, preview: c.preview, uri: c.uri, thumb: c.thumb, year: c.year});
+let plPending = null;
+function openPlMenu(anchor, c){
+  plPending = c;
+  const m = $('#plMenu');
+  m.innerHTML = state.playlists.map((p, i) => `<button data-pl="${i}">${esc(p.name)} <span class="muted small">(${p.tracks.length})</span></button>`).join('') + '<button data-pl="new">+ Nieuwe playlist…</button>';
+  const r = anchor.getBoundingClientRect();
+  m.style.top = (window.scrollY + r.bottom + 4) + 'px';
+  m.style.left = Math.max(8, Math.min(window.innerWidth - 230, window.scrollX + r.left - 120)) + 'px';
+  m.classList.add('on');
+}
+document.addEventListener('click', e => {
+  const m = $('#plMenu');
+  const b = e.target.closest('#plMenu [data-pl]');
+  if (b && plPending){
+    let i = b.dataset.pl;
+    if (i === 'new'){
+      const name = prompt('Naam van de playlist:', 'Digging ' + new Date().toLocaleDateString('nl-NL'));
+      if (!name){ m.classList.remove('on'); return; }
+      state.playlists.push({id: Date.now(), name, tracks: []}); i = state.playlists.length - 1;
+    }
+    const pl = state.playlists[+i], t = plTrack(plPending);
+    if (pl.tracks.some(x => enKey(x) === enKey(t))) toast('Staat al in ' + pl.name);
+    else { pl.tracks.push(t); save(); toast('Toegevoegd aan ' + pl.name); }
+    m.classList.remove('on'); plPending = null; return;
+  }
+  if (!e.target.closest('#plMenu') && !e.target.closest('[data-act=addpl],[data-addt]')) m.classList.remove('on');
+});
+function plText(pl){ return pl.tracks.map(t => `${t.artist} - ${t.title}`).join('\n'); }
+async function pushToSpotify(pl, btn){
+  if (!spConnected()){ showTab('settings'); $('#spMsg').innerHTML = '<span class="warn">Verbind eerst met Spotify.</span>'; return; }
+  btn.disabled = true;
+  const uris = [], missing = [];
+  for (let i = 0; i < pl.tracks.length; i++){
+    const t = pl.tracks[i];
+    btn.textContent = `Zoeken op Spotify ${i + 1}/${pl.tracks.length}…`;
+    const u = t.spotifyUri || await spSearch(t.artist, t.title);
+    if (u){ t.spotifyUri = u; uris.push(u); } else missing.push(t.artist + ' – ' + t.title);
+  }
+  try {
+    btn.textContent = 'Playlist maken…';
+    if (!pl.spotifyId){
+      const me = state.spUser || await spWeb('/me');
+      const created = await spWeb('/users/' + encodeURIComponent(me.id) + '/playlists', {method: 'POST', body: JSON.stringify({name: pl.name, public: false, description: 'Gemaakt met Digging Tool'})});
+      pl.spotifyId = created.id; pl.spotifyUrl = created.external_urls && created.external_urls.spotify;
+    }
+    // replace the contents in chunks of 100
+    for (let i = 0; i < Math.max(1, uris.length); i += 100){
+      const chunk = uris.slice(i, i + 100);
+      const method = i === 0 ? 'PUT' : 'POST';
+      try { await spWeb('/playlists/' + pl.spotifyId + '/tracks', {method, body: JSON.stringify({uris: chunk})}); }
+      catch(e){ if (e.status === 404 || e.status === 410) await spWeb('/playlists/' + pl.spotifyId + '/items', {method, body: JSON.stringify({uris: chunk})}); else throw e; }
+    }
+    save(); renderPlaylists();
+    toast(`${uris.length} tracks in Spotify gezet`);
+    if (missing.length) alert('Niet gevonden op Spotify:\n\n' + missing.join('\n'));
+  } catch(e){ alert(e.message); btn.disabled = false; btn.textContent = 'Zet in Spotify'; }
+}
+function renderPlaylists(){
+  $('#plList').innerHTML = state.playlists.map((pl, pi) => {
+    const es = pl.tracks.map(energyOf).filter(Boolean);
+    return `<div class="card" data-pli="${pi}">
+      <div class="row"><h2 class="grow" style="margin:0">${esc(pl.name)}</h2><span class="small muted">${pl.tracks.length} tracks${es.length ? ' · energie gem. ' + (es.reduce((a, b) => a + b, 0) / es.length).toFixed(1) : ''}</span></div>
+      <div class="row" style="margin:10px 0">
+        <button class="btn primary small" data-pla="copy">Kopieer voor Spotify</button>
+        <a class="btn small" href="https://www.tunemymusic.com/transfer" target="_blank" rel="noopener">Open TuneMyMusic</a>
+        <a class="btn small" href="https://soundiiz.com/webapp/playlists/import" target="_blank" rel="noopener">Open Soundiiz</a>
+        <button class="btn small" data-pla="csv">Download CSV</button>
+        <button class="btn small" data-pla="play">▶ Speel af</button>
+        <button class="btn small" data-pla="sortup">Sorteer: energie oplopend</button>
+        <button class="btn primary small" data-pla="tospotify">${pl.spotifyUrl ? 'Update in Spotify' : 'Zet in Spotify'}</button>
+        ${pl.spotifyUrl ? `<a class="btn small" href="${esc(pl.spotifyUrl)}" target="_blank" rel="noopener">Open in Spotify</a>` : ''}
+        <button class="btn small" data-pla="rename">Hernoem</button>
+        <button class="btn small" data-pla="del">Verwijder</button>
+      </div>
+      ${pl.tracks.map((t, i) => `<div class="plrow" data-ti="${i}"><span class="muted small">${i + 1}</span><button class="play" data-pla="playone" title="Preview">▶</button>
+        <span>${esc(t.artist)} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
+        <span class="ctl"><button data-pla="up" title="Omhoog">↑</button><button data-pla="down" title="Omlaag">↓</button><button data-pla="rm" title="Verwijder">✕</button></span></div>`).join('') || '<div class="muted small">Nog leeg.</div>'}
+    </div>`;
+  }).join('') || '<div class="empty">Nog geen playlists.</div>';
+  queueEnergy(state.playlists.flatMap(p => p.tracks));
+}
+$('#newPlBtn').onclick = () => {
+  const name = $('#newPlName').value.trim(); if (!name) return;
+  state.playlists.push({id: Date.now(), name, tracks: []}); save(); $('#newPlName').value = ''; renderPlaylists();
+};
+$('#plList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-pla]'); if (!b) return;
+  const card = b.closest('[data-pli]'), pl = state.playlists[+card.dataset.pli];
+  const row = b.closest('[data-ti]'), i = row ? +row.dataset.ti : -1;
+  const a = b.dataset.pla;
+  const qItems = () => pl.tracks.map(t => ({artist: t.artist, title: t.title, preview: t.preview, dzTrackId: t.dzTrackId}));
+  if (a === 'copy'){
+    const txt = plText(pl);
+    try { await navigator.clipboard.writeText(txt); toast(pl.tracks.length + ' tracks gekopieerd'); }
+    catch(err){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Gekopieerd'); }
+    return;
+  }
+  if (a === 'csv'){
+    const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const csv = 'Artist,Title,Album,Label,Energy\n' + pl.tracks.map(t => [t.artist, t.title, t.releaseTitle, (t.labels[0] || {}).name, energyOf(t)].map(q).join(',')).join('\n');
+    const el = document.createElement('a'); el.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+    el.download = pl.name.replace(/[^\w\- ]+/g, '') + '.csv'; el.click(); return;
+  }
+  if (a === 'tospotify') return pushToSpotify(pl, b);
+  if (a === 'play') return playQueue(qItems(), 0);
+  if (a === 'playone') return playQueue(qItems(), i);
+  if (a === 'sortup'){ pl.tracks.sort((x, y) => (energyOf(x) || 3) - (energyOf(y) || 3)); }
+  if (a === 'rename'){ const n = prompt('Nieuwe naam:', pl.name); if (n) pl.name = n; }
+  if (a === 'del'){ if (!confirm('Playlist "' + pl.name + '" verwijderen?')) return; state.playlists.splice(+card.dataset.pli, 1); }
+  if (a === 'up' && i > 0) [pl.tracks[i - 1], pl.tracks[i]] = [pl.tracks[i], pl.tracks[i - 1]];
+  if (a === 'down' && i < pl.tracks.length - 1) [pl.tracks[i + 1], pl.tracks[i]] = [pl.tracks[i], pl.tracks[i + 1]];
+  if (a === 'rm') pl.tracks.splice(i, 1);
+  save(); renderPlaylists();
+});
+
+/* --- profile --- */
+function bars(entries, label){
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  return `<div class="card"><h3 style="margin-top:0">${label}</h3><div class="bars">${entries.map(([k, v]) =>
+    `<div><span>${esc(k)}</span><span class="b"><i style="width:${Math.round(100 * v / max)}%"></i></span><span class="muted small">${fmtW(v)}</span></div>`).join('') || '<span class="muted">Nog niets.</span>'}</div></div>`;
+}
+function renderProfile(){
+  const P = buildProfile();
+  const nice = (obj, ids) => topN(obj, 20).map(([k, v]) => [(ids[k] && ids[k].name) || k, v]);
+  const yrs = P.years.slice().sort((a, b) => a - b);
+  const med = yrs.length ? yrs[Math.floor(yrs.length / 2)] : null;
+  $('#profileView').innerHTML = `<p class="muted">Gebaseerd op ${P.n} tracks en likes${med ? `, mediaan jaar ${med} (${yrs[0]}–${yrs[yrs.length - 1]})` : ''}.</p>
+    ${energyProfile()}
+    ${typeProfile()}
+    <div class="grid3">${bars(nice(P.labels, P.labelIds), 'Labels')}${bars(nice(P.artists, P.artistIds), 'Artiesten')}${bars(topN(P.styles, 20), 'Stijlen')}</div>`;
+}
+function typeProfile(){
+  const items = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean);
+  const cnt = {}; let n = 0;
+  items.forEach(it => { const ty = typesOf(it); if (ty){ n++; ty.forEach(k => cnt[k] = (cnt[k] || 0) + 1); } });
+  if (!n) return '';
+  return bars(TYPES.map(([k, name]) => [name, cnt[k] || 0]).sort((a, b) => b[1] - a[1]), 'Types in je sets (' + n + ' tracks)');
+}
+function energyProfile(){
+  const es = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).map(energyOf).filter(Boolean);
+  if (!es.length) return '<p class="small muted">Energie van je sets: open het tabblad Sets om ze te laten meten.</p>';
+  const cnt = [1, 2, 3, 4, 5].map(e => [String(e), es.filter(x => x === e).length]);
+  const sorted = es.slice().sort((a, b) => a - b);
+  const lo = sorted[Math.floor(sorted.length * 0.15)], hi = sorted[Math.floor(sorted.length * 0.85)];
+  return `<div class="card"><h3 style="margin-top:0">Energie in je sets</h3>
+    <p class="small muted">${es.length} tracks gemeten, gemiddeld ${(es.reduce((a, b) => a + b, 0) / es.length).toFixed(1)}. Meestal zit je tussen ${lo} en ${hi}.
+    <a href="#" id="useEnRange">Gebruik ${lo}–${hi} als filter</a></p>
+    <div class="bars">${cnt.map(([k, v]) => `<div><span>Energie ${k}</span><span class="b"><i style="width:${Math.round(100 * v / Math.max(1, ...cnt.map(c => c[1])))}%"></i></span><span class="muted small">${v}</span></div>`).join('')}</div></div>`;
+}
+document.addEventListener('click', e => {
+  if (e.target.id !== 'useEnRange') return;
+  e.preventDefault();
+  const m = e.target.textContent.match(/(\d)–(\d)/);
+  $('#enMin').value = m[1]; $('#enMax').value = m[2]; applyDigitalFilter(); showTab('recs');
+});
+function refreshStyleFilter(){
+  const P = buildProfile(); const cur = $('#styleFilter').value;
+  $('#styleFilter').innerHTML = '<option value="">Alle</option>' + topN(P.styles, 15).map(([s]) => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('');
+}
+function renderLikes(){
+  $('#likeList').innerHTML = state.likes.length ? `<div class="card">${state.likes.map((c, i) => recHTML(c, i, 'likes')).join('')}</div>` : '<div class="empty">Nog geen likes.</div>';
+}
+
+/* --- settings --- */
+$('#token').value = state.token;
+function cleanToken(t){
+  return (t || '').replace(/^\s*(discogs\s+)?token\s*[=:]\s*/i, '').replace(/["'`\s]/g, '');
+}
+$('#saveToken').onclick = async () => {
+  const tok = cleanToken($('#token').value);
+  $('#token').value = tok;
+  state.token = tok; save();
+  const msg = h => $('#tokenMsg').innerHTML = h;
+  if (!tok) return msg('<span class="bad">Het veld is leeg.</span>');
+  const fmt = /^[A-Za-z0-9]{30,50}$/.test(tok) ? '' : ` Let op: dit lijkt geen Discogs-token (${tok.length} tekens, verwacht ongeveer 40 letters en cijfers). Kopieer de lange code onder "Personal access token", niet je Consumer Key of Secret.`;
+  msg('Testen…');
+  const inFrame = (() => { try { return window.self !== window.top; } catch(e){ return true; } })();
+  let r;
+  try { r = await fetch(API + '/oauth/identity?token=' + encodeURIComponent(tok), {cache: 'no-store'}); }
+  catch(err){
+    // network/CORS failure: is Discogs reachable at all without a token?
+    let open = false;
+    try { open = (await fetch(API + '/artists/1', {cache: 'no-store'})).ok; } catch(e){}
+    return msg(`<span class="bad">Kon Discogs niet bereiken (${esc(err.message)}).</span><br><span class="muted">` +
+      (inFrame || !/^(file|https?):$/.test(location.protocol)
+        ? 'Je opent de app waarschijnlijk in een voorbeeldvenster dat geen internet mag gebruiken. Download het bestand en open het in Chrome of Safari.'
+        : open ? 'Discogs is wel bereikbaar, maar de token-aanvraag werd geblokkeerd. Probeer Chrome, en zet adblockers of privacy-extensies uit voor deze pagina.'
+               : 'Discogs is helemaal niet bereikbaar vanuit deze browser. Check je internet, VPN of adblocker, of probeer Chrome. In Safari kan het helpen om de app in Chrome te openen.') +
+      ` (adres: ${esc(location.protocol)}//…)</span>`);
+  }
+  let body = {};
+  try { body = await r.json(); } catch(e){}
+  if (r.ok) return msg(`<span class="ok">Werkt. Ingelogd als ${esc(body.username)}.</span>`);
+  if (r.status === 401) return msg(`<span class="bad">Discogs weigert dit token (401: ${esc(body.message || 'unauthorized')}).</span><span class="muted">${fmt || ' Maak een nieuw token aan op discogs.com/settings/developers en plak het opnieuw.'}</span>`);
+  if (r.status === 429) return msg('<span class="warn">Discogs zegt dat er te veel verzoeken waren. Wacht een minuut en probeer opnieuw.</span>');
+  msg(`<span class="bad">Discogs gaf een fout (HTTP ${r.status}${body.message ? ': ' + esc(body.message) : ''}).</span>`);
+};
+/* --- updates: hand a newer digging.html to the local server --- */
+const APP_VERSION = +((document.querySelector('meta[name="dt-version"]') || {}).content || 0);
+async function installUpdate(file){
+  const msg = t => { const m = $('#upMsg'); if (m) m.innerHTML = t; };
+  if (!SERVED){ msg('<span class="bad">Open de app via het Digging Tool-icoon om te updaten.</span>'); return; }
+  const html = await file.text();
+  const m = html.match(/name="dt-version" content="(\d+)"/);
+  if (!m || !/<title>Digging Tool<\/title>/.test(html)){ msg('<span class="bad">Dit is geen Digging Tool-bestand.</span>'); return; }
+  if (+m[1] <= APP_VERSION){ msg(`<span class="warn">Je hebt deze versie (of een nieuwere) al.</span>`); return; }
+  try {
+    const r = await fetch('/__update', {method: 'POST', headers: {'Content-Type': 'text/html'}, body: html});
+    if (!r.ok) throw new Error(await r.text());
+    await flushBackup();
+    msg('<span class="ok">Update geïnstalleerd, de app herstart…</span>');
+    setTimeout(() => location.reload(), 800);
+  } catch(e){ msg('<span class="bad">Update mislukt: ' + esc(e.message || '') + ' Start "Installeer Digging Tool.command" uit de nieuwe zip.</span>'); }
+}
+// automatic updates: fetch the newest version from GitHub and hand it to the local server
+const UPDATE_URL = (document.querySelector('meta[name="dt-update"]') || {}).content || '';
+async function autoUpdate(){
+  if (!SERVED || !UPDATE_URL) return;
+  try {
+    const r = await fetch(UPDATE_URL + '?t=' + Date.now(), {cache: 'no-store'});
+    if (!r.ok) return;
+    const html = await r.text(), m = html.match(/name="dt-version" content="(\d+)"/);
+    if (!m || +m[1] <= APP_VERSION || !/<title>Digging Tool<\/title>/.test(html)) return;
+    const u = await fetch('/__update', {method: 'POST', headers: {'Content-Type': 'text/html'}, body: html});
+    if (!u.ok) return;
+    await flushBackup();
+    toast('Nieuwe versie geïnstalleerd, de app herlaadt…');
+    // don't interrupt a playing track: reload once playback stops, or right away when nothing plays
+    const go = () => location.reload();
+    if (typeof eng !== 'undefined' && eng && eng.paused && !eng.paused()){ const iv = setInterval(() => { if (eng.paused()){ clearInterval(iv); go(); } }, 3000); }
+    else setTimeout(go, 1500);
+  } catch(e){}
+}
+setTimeout(autoUpdate, 4000); setInterval(autoUpdate, 3 * 3600e3);
+$('#upFile').onchange = e => { const f = e.target.files[0]; if (f) installUpdate(f); e.target.value = ''; };
+document.addEventListener('dragover', e => { if ([...(e.dataTransfer.items || [])].some(i => i.kind === 'file')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  const f = [...(e.dataTransfer.files || [])].find(f => /\.html?$/i.test(f.name));
+  if (f){ e.preventDefault(); showTab('settings'); installUpdate(f); }
+});
+$('#ytKey').value = state.ytKey || '';
+$('#saveYt').onclick = () => { state.ytKey = $('#ytKey').value.trim(); save(); $('#ytMsg').innerHTML = '<span class="ok">Opgeslagen</span>'; };
+$('#exportBtn').onclick = () => {
+  const {token, ytKey, ...data} = state;
+  const blob = new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'digging-backup-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+};
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const d = JSON.parse(await f.text()); ['sets', 'likes', 'skips', 'lastRecs', 'playlists'].forEach(k => { if (Array.isArray(d[k])) state[k] = d[k]; }); if (d.energy && typeof d.energy === 'object') state.energy = d.energy; save(); alert('Back-up geladen.'); renderRecs(); refreshStyleFilter(); }
+  catch(err){ alert('Ongeldig bestand.'); }
+};
+$('#clearCache').onclick = async () => { await idb.clear(); alert('Cache geleegd.'); };
+$('#clearSkips').onclick = () => { state.skips = []; save(); alert('Skips gereset.'); };
+
+renderRecs(); refreshStyleFilter();
+
+spStatus(); spHandleRedirect();
+if (SERVED){
+  fetch('/__backup', {cache: 'no-store'}).then(r => r.ok ? r.json() : null).then(d => {
+    if (d && (d.sets || d.likes || d.playlists)){
+      const added = mergeData(d);
+      if (added){ localStorage.setItem(LS_KEY, JSON.stringify(state)); toast(added + ' sets/likes/playlists teruggezet uit je back-up'); renderRecs(); refreshStyleFilter(); }
+    }
+  }).catch(() => {}).finally(() => { backupReady = true; scheduleBackup(); $('#bkMsg') && ($('#bkMsg').textContent = 'Automatische back-up staat aan: digging-data.json in je app-map.'); });
+}
+// Spotify only accepts 127.0.0.1 (not "localhost"). Browsers keep data per address, so move everything over automatically.
+(function migrate(){
+  const target = location.protocol === 'file:' ? 'http://127.0.0.1:8765/digging.html' : 'http://127.0.0.1:' + (location.port || '8765') + location.pathname;
+  if (location.hostname === 'localhost'){
+    const {token, ...data} = state;
+    const has = (data.sets || []).length || (data.likes || []).length || (data.playlists || []).length;
+    document.body.innerHTML = '<div class="empty">Je gegevens worden verhuisd naar ' + esc(target) + '…</div>';
+    delete data.lastRecs;
+    location.replace(target + (has ? '#migrate=' + encodeURIComponent(JSON.stringify(Object.assign(data, {token}))) : ''));
+    return;
+  }
+  if (location.protocol === 'file:'){
+    // the very first versions were opened as a file: offer to move that data into the app
+    const has = (state.sets || []).length || (state.likes || []).length || (state.playlists || []).length;
+    const bar = document.createElement('div');
+    bar.className = 'card'; bar.style.cssText = 'margin:16px;border-color:var(--warn)';
+    const {lastRecs, ...data} = state;
+    bar.innerHTML = '<h2 style="margin-top:0">Je hebt een los bestand geopend</h2>'
+      + '<p class="small muted">De app werkt alleen goed via <b>http://127.0.0.1:8765</b>. Heb je "Installeer Digging Tool" al één keer uitgevoerd, klik dan hieronder. Anders: voer eerst die installatie uit (zie de uitleg in de chat).</p>'
+      + (has
+        ? `<p class="small">In dit bestand staan nog <b>${state.sets.length} sets, ${state.likes.length} likes en ${state.playlists.length} playlists</b>. Met de knop neem je ze mee.</p><a class="btn primary" href="${target}#migrate=${encodeURIComponent(JSON.stringify(data))}">Open de app en neem alles mee</a>`
+        : `<a class="btn primary" href="${target}">Open de app</a>`);
+    document.body.prepend(bar);
+  }
+  const m = location.hash.match(/^#migrate=(.*)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const d = JSON.parse(decodeURIComponent(m[1]));
+    mergeData(d);
+    save();
+    toast('Je sets, likes en playlists zijn overgezet');
+    renderRecs(); refreshStyleFilter(); spStatus(); $('#token').value = state.token || ''; $('#ytKey').value = state.ytKey || '';
+  } catch(e){ console.warn('migrate', e); }
+})();
+</script>
+</body>
+</html>
