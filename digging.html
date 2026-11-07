@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="21">
+<meta name="dt-version" content="24">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -138,8 +138,8 @@ details.sect:not([open])>summary::before{content:'▸ '}
       <button class="btn primary" id="genBtn">Genereer aanbevelingen</button>
       <label class="small muted">Richting
         <select id="popMode" style="width:auto">
-          <option value="gems">Verborgen parels</option>
-          <option value="neutral" selected>Neutraal</option>
+          <option value="gems" selected>Verborgen parels</option>
+          <option value="neutral">Neutraal</option>
           <option value="classics">Klassiekers</option>
         </select>
       </label>
@@ -229,6 +229,18 @@ details.sect:not([open])>summary::before{content:'▸ '}
     <p class="small muted">Voor volledige tracks zoekt de app de juiste YouTube-video. Dat werkt meestal zonder sleutel. Vindt hij vaak niets, maak dan gratis een "YouTube Data API v3"-sleutel aan in <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud</a> (API inschakelen, dan Credentials → API key) en plak hem hier.</p>
     <div class="row"><input id="ytKey" class="grow" type="password" placeholder="Plak je YouTube API-sleutel"><button class="btn" id="saveYt">Opslaan</button><span class="small" id="ytMsg"></span></div>
   </div>
+  <div class="card" id="exCard">
+    <h2>Voorbeelden per type</h2>
+    <p class="small muted">De app leert de types (hypnotic, filler, tool, breaky, ambient, deep, dub) van de klank van jouw voorbeeldtracks, niet van de artiest. Elke track die je zelf een type geeft, telt ook als voorbeeld. Voeg Rekordbox-exports toe (de bestandsnaam bepaalt het type, bijv. hypnotic.txt) of plak regels "Artiest - Titel" onder een kopje met het type.</p>
+    <div class="row">
+      <label class="btn primary">Rekordbox-export(s) toevoegen<input type="file" id="exFiles" accept=".txt,.tsv,.csv" multiple hidden></label>
+      <button class="btn" id="exPasteBtn">Plak lijst</button>
+      <button class="btn" id="exRetrain">Opnieuw beluisteren</button>
+      <span class="small" id="exMsg"></span>
+    </div>
+    <textarea id="exPaste" rows="6" hidden placeholder="Hypnotic&#10;Artiest - Titel&#10;Artiest - Titel&#10;&#10;Tool&#10;Artiest - Titel"></textarea>
+    <div id="exList" class="small" style="margin-top:8px"></div>
+  </div>
   <div class="card" id="upCard">
     <h2>Updates</h2>
     <p class="small muted">De app haalt nieuwe versies zelf op en installeert ze, je data blijft staan. Een gedownloade <b>digging.html</b> in je Downloads-map neemt hij ook vanzelf over. Lukt dat niet, kies het bestand dan hier (of sleep het op dit venster). Je gegevens blijven gewoon staan.</p>
@@ -290,7 +302,7 @@ const state = loadState();
 function loadState(){
   let s = {};
   try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) {}
-  return Object.assign({token:'', sets:[], likes:[], skips:[], lastRecs:[], energy:{}, playlists:[], types:{}}, s);
+  return Object.assign({token:'', sets:[], likes:[], skips:[], lastRecs:[], energy:{}, playlists:[], types:{}, bans:[], shown:{}}, s);
 }
 function save(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){ console.warn(e); } scheduleBackup(); }
 // Automatic backup to digging-data.json in the app folder (through the local server), so browser storage can never lose your data
@@ -314,7 +326,8 @@ function flushBackup(){
 function mergeData(d){
   const key = x => JSON.stringify(x);
   let added = 0;
-  ['sets', 'likes', 'skips', 'playlists'].forEach(k => {
+  if (d.shown && typeof d.shown === 'object') Object.entries(d.shown).forEach(([k, v]) => { state.shown = state.shown || {}; if (!(k in state.shown)) state.shown[k] = v; });
+  ['sets', 'likes', 'skips', 'playlists', 'bans', 'examples'].forEach(k => {
     if (!Array.isArray(d[k])) return;
     const idk = x => x.id != null ? 'id' + x.id : x.releaseId != null ? 'r' + x.releaseId : key(x);
     const have = new Set((state[k] || []).map(idk));
@@ -575,6 +588,9 @@ function buildProfile(T){
   state.sets.forEach(set => set.tracks.forEach(t => { if (t.item){ add(t.item, tw(t.item)); markSeen(P, t.item); } }));
   state.likes.forEach(l => { add(l, 1.5); markSeen(P, l); });
   state.skips.forEach(s => markSeen(P, s));
+  P.skipArtists = new Set(state.skips.flatMap(s => (s.artists || []).map(a => norm(a.name))));
+  P.banArtists = new Set((state.bans || []).flatMap(b => (b.artists || []).map(a => norm(a.name))));
+  (state.bans || []).forEach(b => markSeen(P, b));
   return P;
 }
 function markSeen(P, it){
@@ -637,7 +653,7 @@ function scoreCand(c, P, opts){
     const al = P.aliases && P.aliases[k];
     if (al && !w){ as = Math.max(as, 0.6 * Math.sqrt(al.w / maxA)); why.push([`${a.name} (${al.rel} ${al.of})`, null]); }
     const rl = P.related && P.related[k];
-    if (rl && !w){ rs = Math.max(rs, Math.sqrt(rl.w / P.maxRel)); why.push([rl.hop === 2 && rl.via ? `Via ${rl.via} → ${rl.of.slice(0, 2).join(', ')}` : `Verwant aan ${rl.of.slice(0, 3).join(', ')}${rl.of.length > 3 ? ' +' + (rl.of.length - 3) : ''}`, null]); }
+    if (rl && !w){ rs = Math.max(rs, Math.sqrt(rl.w / P.maxRel) * (rl.hop === 2 ? (rl.of.length >= 2 ? 0.8 : 0.45) : 1)); why.push([rl.hop === 2 && rl.via ? `Via ${rl.via} → ${rl.of.slice(0, 2).join(', ')}` : `Verwant aan ${rl.of.slice(0, 3).join(', ')}${rl.of.length > 3 ? ' +' + (rl.of.length - 3) : ''}`, null]); }
   });
   // style cosine similarity
   const sv = P.styleVec, cs = c.styles || [];
@@ -653,11 +669,20 @@ function scoreCand(c, P, opts){
   }
   if (!cs.length) ss = 0.35;               // no style info (Deezer): neutral
   let score = 0.28 * ls + 0.22 * as + 0.32 * rs + 0.18 * ss;
+  if (P.skipArtists && c.artists.some(a => P.skipArtists.has(norm(a.name)))){ score *= 0.3; why.push(['Artiest eerder geskipt', null]); }
   if (c.source !== 'deezer' && !(c.genres || []).includes('Electronic')) score *= 0.4;
   const pop = c.source === 'deezer' ? Math.log10(1 + (c.rank || 0)) / 6 : Math.log10(1 + (c.want || 0)) / 4; // 0..~1
-  if (opts.popMode === 'gems') score *= 1.08 - 0.25 * Math.min(1, pop);
+  // how big is the artist (Deezer fans) and the track (Deezer rank)
+  const fans = Math.max(0, ...c.artists.map(a => { const r = P.related && P.related[norm(a.name)]; return (r && r.fans) || 0; }));
+  const big = fans > 150000 ? 0.3 : fans > 60000 ? 0.5 : fans > 20000 ? 0.75 : fans > 0 && fans < 5000 ? 1.15 : 1;
+  const hit = c.rank > 600000 ? 0.55 : c.rank > 400000 ? 0.8 : 1;
+  if (opts.popMode === 'gems'){ score *= big * hit; if (fans > 60000) why.push(['Grote artiest', null]); }
   else if (opts.popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
-  else score *= 0.95 + 0.1 * Math.min(1, pop);
+  else score *= Math.sqrt(big * hit);
+  if (P.banArtists && c.artists.some(a => P.banArtists.has(norm(a.name)))) score = 0;
+  // shown in earlier recommendation rounds: make room for new tracks
+  const seenN = (state.shown || {})[candKey(c)] || 0;
+  if (seenN && !opts.noShown) score *= seenN >= 2 ? 0.15 : 0.35;
   // which section of the overview it belongs to
   const section = as > 0 && c.artists.some(a => P.artists[norm(a.name)]) ? 'known' : rs > 0 ? 'related' : ls > 0 ? 'label' : 'related';
   return {score, section, why: why.map(([t, w]) => w ? `${t} · ${fmtW(w)}` : t)};
@@ -763,7 +788,7 @@ async function expandRelated(P, keys, perArtist = 20){
       const d = await dz('/artist/' + ref.dz + '/related', {limit: perArtist});
       (d && d.data || []).forEach((x, i) => {
         const xk = norm(x.name); if (P.artists[xk]) return;
-        const r = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 1});
+        const r = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 1, fans: x.nb_fan});
         r.w += (P.artists[k] || 1) * (1 - i / (perArtist * 2));
         if (!r.of.includes(ref.name)) r.of.push(ref.name);
       });
@@ -780,7 +805,7 @@ async function expandRelated2(P, n, perArtist = 15, onStep){
       const d = await dz('/artist/' + r.dz + '/related', {limit: perArtist});
       (d && d.data || []).forEach((x, j) => {
         const xk = norm(x.name); if (P.artists[xk]) return;
-        const t = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 2});
+        const t = P.related[xk] || (P.related[xk] = {w: 0, of: [], dz: x.id, name: x.name, hop: 2, fans: x.nb_fan});
         t.w += 0.35 * r.w * (1 - j / (perArtist * 2));
         if (t.hop === 2 && !t.via) t.via = r.name;
         r.of.forEach(o => { if (!t.of.includes(o)) t.of.push(o); });
@@ -804,11 +829,11 @@ async function generateRecs(){
   const T = target();
   const steer = hasTarget(T);
   const prog = makeProg('#genProg', '#genMsg');
-  if (steer){
-    // make sure the set tracks are measured, so we know which ones fit the target
-    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean);
-    const todo = seeds.filter(c => { const h = state.energy[enKey(c)], t = state.types[enKey(c)]; return !h || !t; }).slice(0, 120);
-    if (todo.length) await measureMany(todo, (d, n) => prog(0.02 * d / n, `Je sets beluisteren voor je doel ${d}/${n}…`));
+  {
+    // listen to your set tracks first (only once, it's remembered), so we know your sound
+    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes);
+    const todo = seeds.filter(c => { const h = state.energy[enKey(c)], t = state.types[enKey(c)]; return !h || !t || (!h.ft && !h.partial && !(t.tried && Date.now() - t.tried < 7 * 864e5)); }).slice(0, 150);
+    if (todo.length) await measureMany(todo, (d, n) => prog(0.1 * d / n, `Je sets beluisteren om je sound te leren ${d}/${n} (alleen de eerste keer)…`));
   }
   const P = prepProfile(buildProfile(steer ? T : null));
   if (!P.n) throw new Error('Nog geen gevonden tracks in je sets.');
@@ -817,7 +842,7 @@ async function generateRecs(){
   const topLabels = topN(P.labels, 15).map(([k]) => k);
   const topArtists = topN(P.artists, 25).map(([k]) => k);
   const topStyles = topN(P.styles, 6).map(([s]) => s).filter(s => !GENERIC_STYLES.has(s)).slice(0, 3);
-  prog(0.02, 'Je artiesten opzoeken op Deezer…');
+  prog(0.1, 'Je artiesten opzoeken op Deezer…');
   await ensureDz(P, topArtists);
   prog(0.06, 'Verwante artiesten zoeken (stap 1)…');
   await expandRelated(P, topArtists, 25);
@@ -833,20 +858,34 @@ async function generateRecs(){
   topStyles.forEach(s => plan.push({params: {style: s, genre: 'Electronic'}, label: 'Stijl ' + s}));
   if (topStyles.length >= 2) plan.push({params: {style: topStyles[0] + ', ' + topStyles[1]}, label: 'Stijlen ' + topStyles[0] + ' + ' + topStyles[1]});
   }
-  let recs = await gatherAndRank(P, plan, opts, (f, l) => prog(0.2 + (steer ? 0.5 : 0.8) * f, l + '…'));
+  let recs = await gatherAndRank(P, plan, opts, (f, l) => prog(0.2 + 0.45 * f, l + '…'));
   let fitInfo = null;
-  if (steer){
-    // listen to the best candidates and re-rank them on the target
-    const listen = recs.filter(c => c.section !== 'known').slice(0, 90).concat(recs.filter(c => c.section === 'known').slice(0, 10));
-    await measureMany(listen, (d, n) => prog(0.7 + 0.3 * d / n, `Kandidaten beluisteren op ${describeTarget(T)} ${d}/${n}…`));
-    let fits = 0;
-    recs.forEach(c => { const r = fitOf(c, T); c.fit = r.f; c.fitWhy = r.why; c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * r.f; if (r.f >= 1.2) fits++; });
-    recs.sort((a, b) => b.score - a.score);
-    fitInfo = {fits, measured: listen.length};
-  }
+  // listen to the best candidates: what doesn't sound like your sets is dropped, the rest is ranked on sound (and your target)
+  const S = soundProfile();
+  const listen = recs.filter(c => c.section !== 'known').slice(0, 130).concat(recs.filter(c => c.section === 'known').slice(0, 10));
+  await measureMany(listen, (d, n) => prog(0.65 + 0.35 * d / n, `Kandidaten beluisteren${steer ? ' op ' + describeTarget(T) : ' op je sound'} ${d}/${n}…`));
+  let fits = 0, dropped = 0;
+  recs.forEach(c => {
+    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []};
+    c.sound = m.f; c.fit = r.f; c.fitWhy = r.why;
+    c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f;
+    if (r.f >= 1.2) fits++;
+  });
+  // unmeasured tracks below the listened ones would stay unchecked: only keep them if there's room
+  recs = recs.filter(c => { const bad = c.sound < 0.35 || c.score <= 0; if (bad) dropped++; return !bad; });
+  recs.sort((a, b) => b.score - a.score);
+  // be critical: only keep tracks that score reasonably close to the best ones, and not too many
+  const bar = recs.length ? 0.3 * (recs[Math.min(4, recs.length - 1)].score) : 0;
+  const before = recs.length;
+  recs = recs.filter(c => c.score >= bar).slice(0, 100);
+  dropped += before - recs.length;
+  state.shown = state.shown || {};
+  recs.forEach(c => { const k = candKey(c); state.shown[k] = (state.shown[k] || 0) + 1; });
+  const sk = Object.keys(state.shown); if (sk.length > 4000) sk.slice(0, sk.length - 4000).forEach(k => delete state.shown[k]);
+  if (steer) fitInfo = {fits, measured: listen.length};
   const nArt = new Set(recs.filter(c => c.section !== 'known').map(c => norm((c.artists[0] || {}).name))).size;
   prog(1, '');
-  recs.meta = {newArtists: nArt, network: Object.keys(P.related).length, fit: fitInfo, target: steer ? describeTarget(T) : ''};
+  recs.meta = {newArtists: nArt, network: Object.keys(P.related).length, fit: fitInfo, target: steer ? describeTarget(T) : '', dropped, soundN: S.n};
   return recs;
 }
 
@@ -865,7 +904,8 @@ async function similarTo(item, progTarget){
   seed.styles.forEach(s => P.styles[s] = 1);
   // light blend with overall sound so "similar" also fits your taste
   const G = buildProfile();
-  Object.entries(G.styles).forEach(([s, w]) => P.styles[s] = (P.styles[s] || 0) + 0.15 * w / Math.max(1, G.n) );
+  P.banArtists = G.banArtists; P.skipArtists = G.skipArtists;
+  if (seed.styles.length) Object.entries(G.styles).forEach(([s, w]) => P.styles[s] = (P.styles[s] || 0) + 0.1 * w / Math.max(1, G.n) );
   G.seen.forEach(x => P.seen.add(x));
   markSeen(P, seed);
   prepProfile(P);
@@ -874,7 +914,8 @@ async function similarTo(item, progTarget){
   const sk = Object.keys(P.artists).slice(0, 3);
   await ensureDz(P, sk);
   await expandRelated(P, sk, 25);
-  const plan = deezerJobs(P, 2, 3, 12);
+  // this track's own direct network: its related artists, deeper into their catalogue (not just their hits)
+  const plan = deezerJobs(P, 2, 3, 20, 8, 15);
   const useDg = discogsOk() && seed.source !== 'deezer';
   const aliasKeys = useDg ? await expandAliases(P, sk) : [];
   if (useDg) Object.keys(P.labels).slice(0, 2).forEach(k => {
@@ -890,13 +931,41 @@ async function similarTo(item, progTarget){
     plan.push({params: Object.assign({style: st.slice(0, 2).join(', ')}, yr), label: 'Stijl ' + st.slice(0, 2).join(' + ')});
     if (seed.year) [-2, -1, 1, 2].forEach(d => plan.push({params: {style: st[0], year: seed.year + d}, label: 'Stijl ' + st[0] + ' ' + (seed.year + d)}));
   }
-  const opts = {popMode: $('#popMode').value, capLabel: 4, capArtist: 2, limit: 30};
-  const list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.1 + 0.9 * f, l + '…'));
+  const opts = {popMode: $('#popMode').value, capLabel: 4, capArtist: 2, limit: 60, noShown: true};
+  let list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.1 + 0.75 * f, l + '…'));
   // nearby years get a small boost
   if (seed.year) list.forEach(c => { if (c.year) c.score *= 1 - Math.min(0.25, Math.abs(c.year - seed.year) * 0.025); });
+  // don't keep showing the same tracks: ones already shown as "similar" elsewhere sink, ones in your main list a bit
+  const onMain = new Set((state.lastRecs || []).map(candKey));
+  list.forEach(c => { const k = candKey(c), n = simShown.get(k) || 0; c.score *= n ? Math.pow(0.4, n) : onMain.has(k) ? 0.75 : 1; });
   list.sort((a, b) => b.score - a.score);
+  // listen: tracks that sound like this one (same type, close energy) go up
+  try {
+    const listen = [item].concat(list.slice(0, 20));
+    await measureMany(listen, (d, n) => prog(0.85 + 0.15 * d / n, `Klank vergelijken ${d}/${n}…`));
+    const e0 = energyOf(item), t0 = typesOf(item) || [], S = soundProfile();
+    list.forEach(c => { const r = soundFit(e0, t0, c), m = soundMatch(c, S); c.fit = r.f; c.fitWhy = r.why; c.score *= r.f * m.f; c.sound = m.f; });
+    list = list.filter(c => !(c.sound < 0.35) && c.score > 0);
+    list.sort((a, b) => b.score - a.score);
+  } catch(e){}
   prog(1, '');
-  return list;
+  return list.slice(0, 30);
+}
+// tracks shown as "similar" in this session (key -> times)
+const simShown = new Map();
+const markSimShown = list => list.forEach(x => { const k = candKey(x); simShown.set(k, (simShown.get(k) || 0) + 1); });
+function soundFit(e0, t0, c){
+  const e = energyOf(c), t = typesOf(c) || [];
+  let f = 1; const why = [];
+  if (t0.length && t.length){
+    const same = t.filter(x => t0.includes(x));
+    if (same.length){ f *= 1.3; why.push(same.map(typeName).join('/')); } else f *= 0.7;
+  }
+  if (e0 && e){
+    const d = Math.abs(e - e0);
+    if (d === 0){ f *= 1.15; why.push('energie ' + e); } else if (d >= 2) f *= 0.65;
+  }
+  return {f, why};
 }
 
 /* ================= Platforms: availability & previews ================= */
@@ -1131,10 +1200,11 @@ function energyFrom(f, meta){
   if (!parts.length) return null;
   const w = parts.reduce((a, p) => a + p[0], 0);
   const raw = parts.reduce((a, p) => a + p[0] * p[1], 0) / w;
-  return {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f};
+  const ft = f ? {lo: f.lowShare, hi: f.highShare, on: f.onsetRate, db: f.db, per: f.periodicity, sp: f.sparsity, ff: f.fourFloor, ec: f.echo, cr: f.crest, ch: f.change} : null;
+  return {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f, bpm: bpm ? Math.round(bpm) : 0, ft};
 }
 /* ================= Track type ================= */
-const TYPES = [['minimal', 'Minimal'], ['hypnotic', 'Hypnotic'], ['ambient', 'Ambient'], ['deep', 'Deep'], ['dub', 'Dub'], ['broken', 'Broken beat']];
+const TYPES = [['minimal', 'Filler/minimal'], ['hypnotic', 'Hypnotic'], ['tool', 'Tool'], ['ambient', 'Ambient'], ['deep', 'Deep'], ['dub', 'Dub'], ['broken', 'Breaky']];
 const typeName = k => (TYPES.find(t => t[0] === k) || [k, k])[1];
 const STYLE_HINTS = {
   minimal: ['Minimal', 'Minimal Techno', 'Microhouse'], ambient: ['Ambient', 'Ambient Techno', 'Drone', 'Downtempo', 'Experimental'],
@@ -1161,6 +1231,123 @@ function typesFrom(f, styles){
   return {tags, scores: r};
 }
 function typesOf(c){ const t = state.types[enKey(c)]; return t ? t.tags : null; }
+
+/* --- learning the types from your own example tracks ---
+   Each type is learned from the sound of the example tracks you gave (and every track you tagged yourself),
+   never from the artist: a track gets a type only because its audio is close to your examples of that type. */
+const DEFAULT_EXAMPLES = [{"type": "minimal", "artist": "Härdstedt, Luigi Tozzi", "title": "Sanyo Blue - Luigi Tozzi Dub Mix", "bpm": 128, "sp": "0oLqEmquMObOaw1oGcRtDn"}, {"type": "minimal", "artist": "ToZzy", "title": "Anoat", "bpm": 127, "sp": "6HyRNHjh1m4yYh621JTkW2"}, {"type": "minimal", "artist": "Nicolas Barnes", "title": "Fiber Square Ground", "bpm": 122, "sp": "6IhvhJMDbZAEVkQRVb1UkQ"}, {"type": "minimal", "artist": "UFO95", "title": "Uncall", "bpm": 134, "sp": "5lle1El8Xvhs9VJsNwk1nm"}, {"type": "hypnotic", "artist": "Developer, Len Faki", "title": "Lost Moments - Len Faki Hardspace Mix", "bpm": 130, "sp": "3v7z82QTt024HL1tcIztVp"}, {"type": "hypnotic", "artist": "Artefakt", "title": "Ossature", "bpm": 126, "sp": "5FIjeHkTYIDUCU3NWnGwge"}, {"type": "hypnotic", "artist": "Eduardo De la Calle", "title": "Supreme Blue", "bpm": 126, "sp": "5QrE2bWl9pjS7xqC5rKrHP"}, {"type": "hypnotic", "artist": "Mod21", "title": "We will finally drown in cold water", "bpm": 127, "sp": "0IpYX2ZX4VmqmHH7JTrjnM"}, {"type": "hypnotic", "artist": "Noah Tauber", "title": "HTDJ", "bpm": 141, "sp": "5uviBbKsVAVLUa4Desf82m"}, {"type": "hypnotic", "artist": "Oscar Mulero", "title": "Claro magnetismo", "bpm": 134, "sp": "3Sb0QXUSU8UoMAxXGpJAli"}, {"type": "hypnotic", "artist": "Forest On Stasys", "title": "Vacuumed Memories", "bpm": 126, "sp": "7FQ4ZP3mikJdG89yZD0dNA"}, {"type": "broken", "artist": "Purpurea, Ness, Onho", "title": "Tlitliltzin", "bpm": 123, "sp": "5aJsTFZ1JxyMKgxQzKkkDV"}, {"type": "broken", "artist": "Elyas", "title": "Silex", "bpm": 128, "sp": "3jeKSZilA1tgNIpiblIYhG"}, {"type": "tool", "artist": "Yagya", "title": "Níundi Stormur", "bpm": 127, "sp": "0zvH8I6XP7fEZoJDSJtgcd"}, {"type": "tool", "artist": "Save Your Atoll", "title": "90's Steps", "bpm": 131, "sp": "4JqQKm7c6nl72sannxiAju"}, {"type": "tool", "artist": "Claudio PRC", "title": "Torque", "bpm": 135, "sp": "3L4lhEOza1S8F8G63Uk5kF"}, {"type": "tool", "artist": "BLNDR", "title": "Dictyocha", "bpm": 125, "sp": "2mWEbhhwxRw4VgkpCbM9NJ"}, {"type": "tool", "artist": "Marcel Dettmann", "title": "Translation One", "bpm": 130, "sp": "1JbS0B98tlbpX22eoh0Qt7"}, {"type": "deep", "artist": "Foreign Material", "title": "Hyperion", "bpm": 126, "sp": "3nQ7R1QmuGjMAGBuKZDYbJ"}, {"type": "deep", "artist": "Nae:Tek, Roman Ridder", "title": "Brook", "bpm": 125, "sp": "51ki55iGEnoiRgVifWXuUE"}, {"type": "deep", "artist": "Feral", "title": "Invocation", "bpm": 128, "sp": "2rM3P1EaZ5T7sWk9PaItkJ"}, {"type": "deep", "artist": "Caldera", "title": "Bogfactor 50", "bpm": 130, "sp": "2HSYqT0q6C9B3ftXbvFtAd"}, {"type": "deep", "artist": "Verhall, RAUM Records", "title": "Off Grid", "bpm": 128, "sp": "2hcMhF2J2Anc5XrTLyHxcI"}, {"type": "deep", "artist": "Giorgio Gigli, VSK", "title": "Hidden Conspiracy", "bpm": 128, "sp": "6wQFP24QZ01rVpJRC6yKn8"}, {"type": "ambient", "artist": "Dasha Rush", "title": "Black Swan", "bpm": 132, "sp": "2sfqPe4FTSdpHGtSLbVFxl"}, {"type": "ambient", "artist": "Tommy Four Seven, Terence Fixmer", "title": "Sevals - Terence Fixmer Remix", "bpm": 126, "sp": "5RaVm2Y9MPoMepFA0S3tQp"}, {"type": "ambient", "artist": "MATRiXXMAN", "title": "Rites", "bpm": 127, "sp": "6HsWWGN1Nfe1euQ8L9EmMq"}, {"type": "ambient", "artist": "Claudio PRC, Enrica Falqui", "title": "Lucid Dreams", "bpm": 130, "sp": "5B1DFWeSM6HCrEBWWwyXcn"}, {"type": "ambient", "artist": "Oscar Mulero, Luigi Tozzi", "title": "Seven", "bpm": 130, "sp": "6Nf4JuoRW4x5oZY9ZBJDyC"}];
+const KNN_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff', 'ec', 'cr', 'ch', 'bpm'];
+const exKey = x => enKey({artists: [{name: x.artist.split(',')[0].trim()}], title: x.title});
+let trainCache = null;
+function trainingSet(){
+  if (trainCache) return trainCache;
+  const rows = [];
+  const vec = (key, bpm) => { const e = state.energy[key]; if (!e || !e.ft) return null; return Object.assign({}, e.ft, {bpm: bpm || e.bpm || 0}); };
+  (state.examples || []).forEach(x => { const v = vec(exKey(x), x.bpm); if (v) rows.push({type: x.type, v, key: exKey(x)}); });
+  Object.entries(state.types).forEach(([k, t]) => { if (!t.manual) return; const v = vec(k); if (v) t.tags.forEach(type => rows.push({type, v, key: k})); });
+  // scale: spread of each feature over all measured tracks
+  const all = Object.values(state.energy).filter(e => e.ft).map(e => Object.assign({}, e.ft, {bpm: e.bpm || 0}));
+  const sd = {}, mu = {};
+  KNN_KEYS.forEach(k => { const v = all.map(x => x[k]).filter(x => x != null && (k !== 'bpm' || x > 0)); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1);
+    mu[k] = m; sd[k] = Math.max(k === 'bpm' ? 3 : 1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
+  const per = {}; rows.forEach(r => per[r.type] = (per[r.type] || 0) + 1);
+  return trainCache = {rows, sd, mu, per};
+}
+function knnTypes(v, selfKey){
+  const T = trainingSet();
+  const types = Object.keys(T.per).filter(t => T.per[t] >= 2);
+  if (types.length < 3) return null;
+  const dist = r => KNN_KEYS.reduce((a, k) => { const x = v[k], y = r.v[k]; if (x == null || y == null || (k === 'bpm' && (!x || !y))) return a; return a + Math.min(9, ((x - y) / T.sd[k]) ** 2); }, 0);
+  const sc = {};
+  types.forEach(t => {
+    const d = T.rows.filter(r => r.type === t && r.key !== selfKey).map(dist).sort((a, b) => a - b).slice(0, 2);
+    if (d.length) sc[t] = d.reduce((a, b) => a + b, 0) / d.length;
+  });
+  const ranked = Object.entries(sc).sort((a, b) => a[1] - b[1]);
+  if (!ranked.length) return null;
+  const best = ranked[0][1];
+  const tags = ranked.filter(([, d], i) => i === 0 || d <= best * 1.12 + 0.3).slice(0, 2).map(([t]) => t);
+  const scores = {}; ranked.forEach(([t, d]) => scores[t] = Math.round(100 / (1 + d)) / 100);
+  return {tags, scores, knn: true};
+}
+function classifyTrack(key, f, styles){
+  const e = state.energy[key];
+  if (e && e.ft){ const r = knnTypes(Object.assign({}, e.ft, {bpm: e.bpm || 0}), key); if (r) return r; }
+  return typesFrom(f, styles);
+}
+// re-run the classifier for every measured track (after new examples or your own tags)
+function reclassifyAll(){
+  trainCache = null;
+  let n = 0;
+  Object.keys(state.energy).forEach(k => {
+    const t = state.types[k]; if (t && t.manual) return;
+    const e = state.energy[k]; if (!e.ft) return;
+    const r = knnTypes(Object.assign({}, e.ft, {bpm: e.bpm || 0}), k); if (!r) return;
+    state.types[k] = Object.assign({}, t || {}, r, {audio: true, tried: (t && t.tried) || Date.now()}); n++;
+  });
+  save(); refreshTypes();
+  return n;
+}
+// listen to the example tracks (once), then retrain
+let exBusy = false;
+async function measureExamples(force){
+  if (exBusy) return; exBusy = true;
+  try {
+    const todo = (state.examples || []).filter(x => { const e = state.energy[exKey(x)]; return force || !e || !e.ft; }).filter(x => !x.failed || force);
+    if (todo.length){
+      exMsg(`Voorbeelden beluisteren 0/${todo.length}…`);
+      const items = todo.map(x => ({x, it: {artists: x.artist.split(',').map(n => ({name: n.trim()})), title: x.title, styles: []}}));
+      await measureMany(items.map(o => o.it), (d, n) => exMsg(`Voorbeelden beluisteren ${d}/${n}…`));
+      items.forEach(({x}) => { const e = state.energy[exKey(x)]; x.failed = !(e && e.ft); if (e && x.bpm) e.bpm = x.bpm; });
+    }
+    const n = reclassifyAll();
+    renderExamples();
+    exMsg(n ? `Types opnieuw bepaald voor ${n} tracks.` : '');
+  } finally { exBusy = false; }
+}
+const exMsg = t => { const m = $('#exMsg'); if (m) m.textContent = t; };
+function renderExamples(){
+  const box = $('#exList'); if (!box) return;
+  const T = trainingSet();
+  box.innerHTML = TYPES.map(([k, n]) => {
+    const list = (state.examples || []).filter(x => x.type === k);
+    const own = Object.values(state.types).filter(t => t.manual && t.tags.includes(k)).length;
+    return `<div style="margin:6px 0"><b>${esc(n)}</b> <span class="muted small">${T.per[k] || 0} bruikbaar${own ? ` (waarvan ${own} zelf getagd)` : ''}${(T.per[k] || 0) < 2 ? ' · nog te weinig, minimaal 2' : ''}</span>
+      <div class="small muted">${list.map(x => `${esc(x.artist)} – ${esc(x.title)}${x.failed ? ' <span class="bad">(niet gevonden)</span>' : ''}`).join(' · ')}</div></div>`;
+  }).join('');
+}
+// Rekordbox export (UTF-16 tab separated) or "Artist - Title" lines under type headings
+const TYPE_WORDS = {hypnotic: 'hypnotic', filler: 'minimal', minimal: 'minimal', tool: 'tool', tools: 'tool', breaky: 'broken', broken: 'broken', ambient: 'ambient', deep: 'deep', dub: 'dub'};
+const typeFromWord = w => { const m = norm(w || '').split(' ').find(x => TYPE_WORDS[x]); return m ? TYPE_WORDS[m] : null; };
+function parseExamples(text, fileType){
+  const out = [], lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const head = lines[0].split('\t');
+  if (head.includes('Track Title') && head.includes('Artist')){
+    const iT = head.indexOf('Track Title'), iA = head.indexOf('Artist'), iB = head.indexOf('BPM');
+    lines.slice(1).forEach(l => { const c = l.split('\t'); if (c[iT] && c[iA] && fileType) out.push({type: fileType, artist: c[iA].replace(/;\s*/g, ', '), title: c[iT], bpm: Math.round(+c[iB] || 0)}); });
+    return out;
+  }
+  let cur = fileType;
+  lines.forEach(l => {
+    const t = l.trim(); if (!t) return;
+    const m = t.match(/^(.+?)\s+[-–]\s+(.+)$/);
+    if (!m){ const ty = typeFromWord(t); if (ty) cur = ty; return; }
+    if (cur) out.push({type: cur, artist: m[1].trim(), title: m[2].trim(), bpm: 0});
+  });
+  return out;
+}
+function addExamples(list){
+  state.examples = state.examples || [];
+  let added = 0;
+  list.forEach(x => { if (!state.examples.some(y => y.type === x.type && exKey(y) === exKey(x))){ state.examples.push(x); added++; } });
+  save(); renderExamples();
+  return added;
+}
+async function readTextFile(f){
+  const buf = new Uint8Array(await f.arrayBuffer());
+  const enc = buf[0] === 0xFF && buf[1] === 0xFE ? 'utf-16le' : buf[0] === 0xFE && buf[1] === 0xFF ? 'utf-16be' : (buf.length > 3 && buf[1] === 0 && buf[3] === 0) ? 'utf-16le' : 'utf-8';
+  return new TextDecoder(enc).decode(buf);
+}
 function typeChips(c){
   const t = state.types[enKey(c)];
   const inner = t ? (t.tags.length ? t.tags.map(k => `<span class="chip">${esc(typeName(k))}</span>`).join('') : '<span class="chip add">+ type</span>') : '';
@@ -1176,7 +1363,8 @@ function refreshTypes(key){
   });
 }
 // click on the type chips: toggle types in a small menu
-let tgKey = null;
+let tgKey = null, retrainT = null;
+const scheduleRetrain = () => { clearTimeout(retrainT); retrainT = setTimeout(reclassifyAll, 1500); };
 document.addEventListener('click', e => {
   const el = e.target.closest('.tg[data-tk]');
   if (el){
@@ -1204,7 +1392,7 @@ document.addEventListener('click', e => {
       state.types[tgKey] = Object.assign({}, t, {tags, manual: true, auto: t.auto || (t.manual ? t.auto : {tags: t.tags})});
       b.classList.toggle('on');
     }
-    save(); refreshTypes(tgKey); applyDigitalFilter();
+    save(); refreshTypes(tgKey); applyDigitalFilter(); scheduleRetrain();
   }
 }, true);
 
@@ -1212,7 +1400,8 @@ async function measureEnergy(c){
   const key = enKey(c);
   const have = state.energy[key], haveT = state.types[key];
   const recentTry = haveT && haveT.tried && Date.now() - haveT.tried < 7 * 864e5;
-  if (have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
+  const oldFormat = have && !have.manual && !have.partial && !have.ft && !recentTry;
+  if (!oldFormat && have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
   const artist = c.artists.map(a => a.name).join(', '), title = c.source === 'deezer' || c.trackFound ? c.title : c.title || c.releaseTitle;
   let meta = {}, preview = c.preview;
   try {
@@ -1224,8 +1413,10 @@ async function measureEnergy(c){
   if (preview){ try { f = audioFeatures(await decodeUrl(preview)); } catch(e){} }
   const r = energyFrom(f, meta);
   if (r && !(have && have.manual)) state.energy[key] = r;
+  else if (r && have && have.manual){ have.bpm = r.bpm; have.ft = r.ft; }
   if (!(haveT && haveT.manual)){
-    const t = typesFrom(f, c.styles);
+    trainCache = null;
+    const t = classifyTrack(key, f, c.styles);
     state.types[key] = Object.assign(t, {audio: !!f, tried: Date.now()});
   }
   save();
@@ -1745,7 +1936,7 @@ function recHTML(c, i, ctx){
     </div>
     <div class="acts">
       ${c.score != null ? `<div class="score">${Math.round(c.score * 100)}</div>` : ''}
-      ${ctx === 'likes' ? '<button class="btn small" data-act="unlike">Verwijder</button>' : '<button class="btn small" data-act="like">♥ Like</button><button class="btn small" data-act="skip">Skip</button>'}
+      ${ctx === 'likes' ? '<button class="btn small" data-act="unlike">Verwijder</button>' : '<button class="btn small" data-act="like">♥ Like</button><button class="btn small" data-act="skip">Skip</button><button class="btn small" data-act="ban" title="Deze track en artiest nooit meer aanbevelen, en minder van deze klank">✕ Niet mijn sound</button>'}
       <button class="btn small" data-act="inlinesim">≈ Vergelijkbaar</button>
       <button class="btn small" data-act="similar">Similar</button>
       <button class="btn small" data-act="addpl">+ Playlist</button>
@@ -1767,6 +1958,13 @@ document.addEventListener('click', async e => {
   const act = b.dataset.act;
   if (act === 'like'){ if (!state.likes.some(l => l.releaseId === c.releaseId)) state.likes.unshift(strip(c)); save(); b.textContent = '♥ Geliked'; b.disabled = true; }
   if (act === 'skip'){ state.skips.push({releaseId: c.releaseId, masterId: c.masterId, artists: c.artists, releaseTitle: c.releaseTitle}); save(); row.style.opacity = .3; }
+  if (act === 'ban'){
+    const e = state.energy[enKey(c)];
+    state.bans = state.bans || [];
+    state.bans.push({releaseId: c.releaseId, masterId: c.masterId, artists: c.artists, title: c.title, releaseTitle: c.releaseTitle, ft: e && e.ft || null});
+    save(); row.style.opacity = .25; b.textContent = 'Geweerd'; b.disabled = true;
+    toast(`${(c.artists[0] || {}).name || 'Deze artiest'} komt niet meer terug in je aanbevelingen`);
+  }
   if (act === 'unlike'){ state.likes = state.likes.filter(l => l.releaseId !== c.releaseId); save(); renderLikes(); }
   if (act === 'similar') openSimilar(c);
   if (act === 'inlinesim') toggleInlineSimilar(row, c, b);
@@ -1840,11 +2038,64 @@ function fitOf(c, T){
   }
   return {f, why};
 }
+/* --- your sound: BPM range + audio character of your set tracks and likes --- */
+const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.max(0, Math.round(q * (b.length - 1))))] : 0; };
+const bpmOf = c => { const e = state.energy[enKey(c)]; if (!e) return 0; if (e.bpm) return e.bpm; const m = /(\d+) BPM/.exec(e.why || ''); return m ? +m[1] : 0; };
+const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff'];
+function soundProfile(){
+  const items = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes);
+  const bpms = [], fts = [], types = {};
+  let nt = 0;
+  items.forEach(c => {
+    const b = bpmOf(c); if (b >= 90 && b <= 170) bpms.push(b);
+    const e = state.energy[enKey(c)]; if (e && e.ft) fts.push(e.ft);
+    const t = typesOf(c); if (t && t.length){ nt++; t.forEach(x => types[x] = (types[x] || 0) + 1); }
+  });
+  const S = {n: fts.length, nb: bpms.length, types, nt, bans: (state.bans || []).map(b => b.ft).filter(Boolean)};
+  if (bpms.length >= 5){ S.bLo = pct(bpms, 0.1) - 4; S.bHi = pct(bpms, 0.9) + 4; }
+  if (fts.length >= 8){
+    S.mu = {}; S.sd = {};
+    FT_KEYS.forEach(k => { const v = fts.map(f => f[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1);
+      S.mu[k] = m; S.sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
+  }
+  return S;
+}
+// 1 = sounds like your sets; low = clearly a different sound. Unmeasured tracks stay neutral.
+function soundMatch(c, S){
+  const e = state.energy[enKey(c)];
+  if (!e) return {f: 1, why: null};
+  let f = 1; const why = [];
+  const b = bpmOf(c);
+  if (b && S.bLo){
+    // half/double tempo detection mistakes: accept those too
+    const ok = x => x >= S.bLo && x <= S.bHi;
+    if (ok(b) || ok(b * 2) || ok(b / 2)) f *= 1.1;
+    else { const d = Math.min(...[b, b * 2, b / 2].map(x => x < S.bLo ? S.bLo - x : x - S.bHi)); f *= d > 8 ? 0.3 : 0.6; why.push(b + ' BPM'); }
+  }
+  if (e.ft && S.mu){
+    // average distance in standard deviations of your own sound
+    const z = FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - S.mu[k]) / S.sd[k])), 0) / FT_KEYS.length;
+    f *= z < 0.8 ? 1.2 : z < 1.2 ? 1 : z < 1.6 ? 0.7 : z < 2.2 ? 0.45 : 0.25;
+    if (z >= 1.6) why.push('andere klank');
+  }
+  if (e.ft && S.mu && S.bans && S.bans.length){
+    const near = S.bans.some(b => FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - b[k]) / S.sd[k])), 0) / FT_KEYS.length < 0.6);
+    if (near){ f *= 0.5; why.push('lijkt op een afgewezen track'); }
+  }
+  const t = typesOf(c);
+  if (t && t.length && S.nt >= 8){
+    // types you (almost) never play count against it
+    const share = Math.max(...t.map(x => (S.types[x] || 0) / S.nt));
+    if (share < 0.05) f *= 0.6;
+  }
+  return {f, why: why.join(', ') || null};
+}
+
 // measure several tracks at once (3 in parallel)
 async function measureMany(list, onStep){
   let i = 0, done = 0;
   const worker = async () => { while (i < list.length){ const c = list[i++]; try { await measureEnergy(c); } catch(e){} onStep && onStep(++done, list.length); } };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([worker(), worker(), worker(), worker()]);
 }
 
 function applyDigitalFilter(){
@@ -1910,7 +2161,8 @@ async function toggleInlineSimilar(row, c, btn){
   if (box.dataset.done) return;
   box.innerHTML = '<div class="small muted">Vergelijkbare tracks zoeken…</div>';
   try {
-    const list = (await similarTo(c, (f, t) => { if (f < 1) box.firstElementChild && (box.firstElementChild.textContent = 'Vergelijkbare tracks zoeken… ' + Math.round(f * 100) + '%'); })).slice(0, 6);
+    const list = (await similarTo(c, (f, t) => { if (f < 1) box.firstElementChild && (box.firstElementChild.textContent = (t || 'Vergelijkbare tracks zoeken…') + ' ' + Math.round(f * 100) + '%'); })).slice(0, 6);
+    markSimShown(list);
     const key = 'isim' + (++inlineN); inlineLists[key] = list;
     box.dataset.done = 1;
     box.innerHTML = list.length ? `<div class="small muted" style="margin:6px 0 2px">Vergelijkbaar met deze track:</div>` + list.map((x, i) => recHTML(x, i, key)).join('')
@@ -1926,6 +2178,7 @@ async function openSimilar(c){
   $('#simList').innerHTML = '';
   try {
     simList = await similarTo(c);
+    markSimShown(simList.slice(0, 10));
     $('#simList').innerHTML = simList.length ? simList.map((x, i) => recHTML(x, i, 'sim')).join('') : '<div class="empty">Niets gevonden.</div>';
     fillAvailability($('#simList'), simList);
     queueEnergy(simList);
@@ -1941,6 +2194,7 @@ $('#genBtn').onclick = async () => {
     state.lastRecs = recs; save();
     renderRecs();
     $('#genMsg').textContent = `${recs.length} aanbevelingen van ${recs.meta.newArtists} nieuwe artiesten, uit een netwerk van ${recs.meta.network} verwante artiesten.`
+      + (recs.meta.dropped ? ` ${recs.meta.dropped} tracks weggelaten (klinken niet als je sets, te zwak of al eerder getoond).` : '')
       + (recs.meta.fit ? (recs.meta.fit.fits ? ` Doel ${recs.meta.target}: ${recs.meta.fit.fits} van de ${recs.meta.fit.measured} beluisterde tracks passen, die staan bovenaan.` : ` Doel ${recs.meta.target}: geen van de ${recs.meta.fit.measured} beluisterde tracks paste. Probeer een ruimer doel, of pas energie/type van een paar tracks aan zodat de app leert wat jij bedoelt.`) : '');
   } catch(err){ $('#genMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
   btn.disabled = false;
@@ -2241,6 +2495,31 @@ $('#saveToken').onclick = async () => {
   if (r.status === 429) return msg('<span class="warn">Discogs zegt dat er te veel verzoeken waren. Wacht een minuut en probeer opnieuw.</span>');
   msg(`<span class="bad">Discogs gaf een fout (HTTP ${r.status}${body.message ? ': ' + esc(body.message) : ''}).</span>`);
 };
+$('#exFiles').onchange = async e => {
+  let added = 0, unknown = [];
+  for (const f of e.target.files){
+    const ty = typeFromWord(f.name.replace(/\.[^.]+$/, '').replace(/[^a-z]+/gi, ' '));
+    const list = parseExamples(await readTextFile(f), ty);
+    if (!list.length && !ty) unknown.push(f.name);
+    added += addExamples(list);
+  }
+  e.target.value = '';
+  exMsg(`${added} voorbeelden toegevoegd.` + (unknown.length ? ` Type onbekend voor ${unknown.join(', ')}: noem het bestand naar het type.` : ''));
+  if (added) measureExamples();
+};
+$('#exPasteBtn').onclick = () => {
+  const ta = $('#exPaste');
+  if (ta.hidden){ ta.hidden = false; $('#exPasteBtn').textContent = 'Voeg toe'; return; }
+  const n = addExamples(parseExamples(ta.value, null));
+  ta.value = ''; ta.hidden = true; $('#exPasteBtn').textContent = 'Plak lijst';
+  exMsg(n + ' voorbeelden toegevoegd.'); if (n) measureExamples();
+};
+$('#exRetrain').onclick = () => measureExamples(true);
+// your first examples (sent on 7 Nov) are added once
+if (!state.examplesSeeded){ state.examples = (state.examples || []).concat(DEFAULT_EXAMPLES.filter(x => !(state.examples || []).some(y => exKey(y) === exKey(x) && y.type === x.type))); state.examplesSeeded = 1; save(); }
+renderExamples();
+setTimeout(() => measureExamples(), 2500);
+
 /* --- updates: hand a newer digging.html to the local server --- */
 const APP_VERSION = +((document.querySelector('meta[name="dt-version"]') || {}).content || 0);
 async function installUpdate(file){
@@ -2298,7 +2577,7 @@ $('#importFile').onchange = async e => {
   catch(err){ alert('Ongeldig bestand.'); }
 };
 $('#clearCache').onclick = async () => { await idb.clear(); alert('Cache geleegd.'); };
-$('#clearSkips').onclick = () => { state.skips = []; save(); alert('Skips gereset.'); };
+$('#clearSkips').onclick = () => { if (!confirm('Skips, "Niet mijn sound" en eerder getoonde tracks resetten?')) return; state.skips = []; state.bans = []; state.shown = {}; save(); alert('Gereset.'); };
 
 renderRecs(); refreshStyleFilter();
 
