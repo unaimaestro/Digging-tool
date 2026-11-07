@@ -4,23 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="31">
+<meta name="dt-version" content="32">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
-  --bg:#0f1011;--panel:#17191b;--panel2:#1f2225;--line:#2b2f33;--text:#e8e6e1;--muted:#8d9196;
-  --accent:#c8f04a;--accent-ink:#141a00;--warn:#f0a04a;--bad:#e86060;--chip:#262a2e;
+  --bg:#110b0a;--panel:#1a1110;--panel2:#261715;--line:#3a2520;--text:#f0e6e0;--muted:#b09c93;
+  --accent:#b84a14;--accent-hi:#ec8a4b;--accent-ink:#fff6ef;--red:#7d1616;--red-hi:#b5302a;--warn:#ec8a4b;--bad:#f07a70;--chip:#2c1c19;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif}
-a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-header{display:flex;align-items:center;gap:24px;padding:14px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;flex-wrap:wrap}
-header h1{font-size:16px;margin:0;letter-spacing:.04em;text-transform:uppercase}
-nav{display:flex;gap:4px;flex-wrap:wrap}
-nav button{background:none;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+a{color:var(--accent-hi);text-decoration:none}a:hover{text-decoration:underline}
+header{display:flex;flex-direction:column;gap:14px;padding:16px 12px 120px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh;box-sizing:border-box;overflow-y:auto;background:#160e0c;z-index:5}
+header h1{font-size:14px;font-weight:800;padding:2px 10px;margin:0;letter-spacing:.04em;text-transform:uppercase}
+nav{display:flex;flex-direction:column;gap:2px}
+nav button{background:none;border:0;color:var(--muted);padding:9px 10px;border-radius:6px;cursor:pointer;font:inherit;text-align:left}nav button:hover{color:var(--text);background:var(--panel2)}
 nav button.on{background:var(--panel2);color:var(--text)}
-#status{margin-left:auto;color:var(--muted);font-size:12px}
-main{max-width:1100px;margin:0 auto;padding:24px 16px 80px}
+#status{color:var(--muted);font-size:12px;padding:0 10px}
+main{min-width:0;padding:12px 16px 80px;container-type:inline-size}
 section{display:none}section.on{display:block}
 h2{font-size:18px;margin:0 0 12px}
 h3{font-size:13px;margin:20px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -36,18 +36,13 @@ textarea{min-height:200px;font-family:ui-monospace,Menlo,monospace;font-size:12.
 .row>*{flex:0 0 auto}.grow{flex:1 1 200px!important}
 .muted{color:var(--muted)}.small{font-size:12px}
 .chip{display:inline-block;background:var(--chip);border-radius:99px;padding:1px 8px;font-size:11.5px;margin:2px 4px 2px 0;color:#cfd2d4}
-.chip.why{background:#2a3314;color:#d9f59a}
+.chip.why{background:#3a1b12;color:#f5bd97}
 .progress{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden;margin:10px 0}
 .progress>div{height:100%;background:var(--accent);width:0;transition:width .2s}
 table{width:100%;border-collapse:collapse}
 td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-weight:500;color:var(--muted);font-size:12px}
-.ok{color:var(--accent)}.warn{color:var(--warn)}.bad{color:var(--bad)}
-.rec{display:grid;grid-template-columns:84px 1fr auto;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
-.rec img,.rec .ph{width:84px;height:84px;border-radius:6px;object-fit:cover;background:var(--panel2)}
-.rec .t{font-weight:600}.rec .a{color:var(--text)}
-.rec .acts{display:flex;flex-direction:column;gap:6px;align-items:stretch}
-.rec .score{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;text-align:right}
+.ok{color:var(--accent-hi)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 .tl{margin-top:8px;font-size:12.5px}
 .tl div{display:flex;gap:8px;padding:2px 0}
 .tl .pos{color:var(--muted);width:28px}
@@ -81,13 +76,10 @@ details.sect>summary .st{font-size:16px;font-weight:600}
 details.sect>summary::before{content:'▾ ';color:var(--muted)}
 details.sect:not([open])>summary::before{content:'▸ '}
 .isim{margin-top:8px;border-left:2px solid var(--line);padding-left:10px}
-.isim .rec{grid-template-columns:48px 1fr auto;padding:8px 0;gap:10px}
-.isim .rec img,.isim .rec .ph{width:48px;height:48px}
-.isim .rec .play{width:20px;height:20px;flex-basis:20px;line-height:20px;font-size:9px}
-.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn.on{border-color:var(--accent-hi);color:var(--accent-hi)}
 .steer{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .tchip{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:4px 12px;cursor:pointer;font:inherit;font-size:13px}
-.tchip.on{background:#3d2f66;border-color:#7d64d6;color:#fff}
+.tchip.on{background:var(--red);border-color:var(--red-hi);color:#fff}
 .ana{margin:8px 0;padding:12px;background:var(--panel2);border-radius:10px}
 .ana h3{margin:12px 0 6px;font-size:14px}
 .ana .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:4px 0}
@@ -95,24 +87,24 @@ details.sect:not([open])>summary::before{content:'▸ '}
 .ana .arc{display:flex;align-items:flex-end;gap:2px;height:46px;margin:6px 0}
 .ana .arc span{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-width:3px}
 .ana ul{margin:4px 0;padding-left:18px}
-.chip.fit{background:#3b2a12;color:#ffc98a}
+.chip.fit{background:#4a2410;color:#ffc494}
 .tl .stores{font-size:11.5px;color:var(--muted)}
-.chip.avail{background:#13303a;color:#8fd8ef}
+.chip.avail{background:#3a1b12;color:#f5bd97}
 .chip.noavail{background:#2a2222;color:#c99}
 .en{display:inline-flex;gap:2px;align-items:flex-end;vertical-align:middle;margin-left:6px;cursor:pointer;padding:2px 3px;border-radius:4px}
 .en:hover{background:var(--panel2)}
-.en i{display:block;width:5px;border-radius:1px;background:#3a3f45}
+.en i{display:block;width:5px;border-radius:1px;background:#4a332d}
 .en i:nth-child(1){height:5px}.en i:nth-child(2){height:7px}.en i:nth-child(3){height:9px}.en i:nth-child(4){height:11px}.en i:nth-child(5){height:13px}
-.en[data-e="1"] i:nth-child(-n+1),.en[data-e="2"] i:nth-child(-n+2){background:#5fb3d9}
-.en[data-e="3"] i:nth-child(-n+3){background:var(--accent)}
-.en[data-e="4"] i:nth-child(-n+4),.en[data-e="5"] i:nth-child(-n+5){background:#f07a4a}
+.en[data-e="1"] i:nth-child(-n+1),.en[data-e="2"] i:nth-child(-n+2){background:#d9b08c}
+.en[data-e="3"] i:nth-child(-n+3){background:#dd7a2b}
+.en[data-e="4"] i:nth-child(-n+4),.en[data-e="5"] i:nth-child(-n+5){background:#c22a22}
 .en b{font-size:11px;font-weight:500;color:var(--muted);margin-left:3px;line-height:13px}
 .en.manual b{color:var(--text)}
 .tg{display:inline;cursor:pointer}
-.tg .chip{background:#2c2440;color:#cdbcf5}
-.tg.manual .chip{background:#3d2f66;color:#fff}
+.tg .chip{background:#3f1512;color:#f3b8ad}
+.tg.manual .chip{background:var(--red);color:#fff}
 .tg .chip.add{background:none;border:1px dashed #4a4f55;color:var(--muted)}
-#plMenu button.on::before{content:'✓ ';color:var(--accent)}
+#plMenu button.on::before{content:'✓ ';color:var(--accent-hi)}
 #plMenu{position:absolute;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
 #plMenu.on{display:block}
 #plMenu button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--text);padding:6px 8px;border-radius:5px;cursor:pointer;font:inherit}
@@ -121,10 +113,46 @@ details.sect:not([open])>summary::before{content:'▸ '}
 .plrow .ctl button{background:none;border:0;color:var(--muted);cursor:pointer;padding:2px 5px;font-size:13px}
 .plrow .ctl button:hover{color:var(--text)}
 .toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;font-weight:600;z-index:40}
-@media (max-width:640px){.rec{grid-template-columns:56px 1fr}.rec img,.rec .ph{width:56px;height:56px}.rec .acts{grid-column:1/-1;flex-direction:row;flex-wrap:wrap}.bars div{grid-template-columns:110px 1fr 30px}}
+@media (max-width:640px){.bars div{grid-template-columns:110px 1fr 30px}}
+#app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+#sideFilters{display:flex;flex-direction:column;gap:10px;padding:14px 10px 0;border-top:1px solid var(--line)}
+#sideFilters h2{font-size:12px;color:var(--muted);font-weight:600;margin:0}
+#sideFilters label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+#sideFilters label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+#sideFilters .two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#sideFilters select,#sideFilters input[type=number]{width:100%}
+#searchWrap{position:sticky;top:0;z-index:4;background:var(--bg);padding:0 0 10px;margin-bottom:6px}
+#searchQ{padding:11px 12px;font-size:14px}
+#searchRes{position:absolute;left:0;right:0;top:calc(100% - 8px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);max-height:420px;overflow:auto;padding:4px}
+.sr{display:grid;grid-template-columns:32px 40px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:5px 8px;border-radius:6px}
+.sr:hover{background:var(--panel2)}.sr img,.sr .ph{width:40px;height:40px;border-radius:4px;object-fit:cover;background:var(--panel2);display:block}
+.sr .n{min-width:0}.sr .n b,.sr .n span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sr .n span{color:var(--muted);font-size:12px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+.vtab{background:none;border:0;color:var(--muted);padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit}.vtab:hover{color:var(--text)}.vtab.on{background:var(--panel2);color:var(--text)}
+.pushb{background:none;border:1px solid var(--accent);color:var(--accent-hi);border-radius:99px;padding:4px 11px;cursor:pointer;font:inherit;font-size:12.5px;white-space:nowrap}
+.pushb:hover{background:var(--accent);color:var(--accent-ink)}.pushb.busy{background:var(--red);border-color:var(--red-hi);color:#fff}
+.colhead,.rw{display:grid;grid-template-columns:30px 36px minmax(180px,2.6fr) minmax(90px,1fr) 42px 74px minmax(100px,1.2fr) 34px 76px;gap:10px;align-items:center}
+.colhead{padding:6px 8px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}
+.colhead .r,.rw .bpmc,.rw .score{text-align:right;font-variant-numeric:tabular-nums}
+.rec{border-bottom:1px solid #2a1a17}.rw{padding:4px 8px;min-height:44px}.rec:hover>.rw{background:var(--panel)}
+.rw img,.rw .ph{width:36px;height:36px;border-radius:4px;object-fit:cover;background:var(--panel2);display:block}
+.tcell{display:block;background:none;border:0;padding:2px 0;color:var(--text);text-align:left;cursor:pointer;font:inherit;min-width:0;width:100%}
+.tcell span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tcell .t{font-weight:600}.tcell .a{color:var(--muted);font-size:12px}
+.lbl,.tyc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}.lbl{color:#d3c3bb}.rw .bpmc{font-size:12.5px}.rw .score{color:var(--muted);font-size:12px}
+.rw .en{margin-left:0}.acts{display:flex;justify-content:flex-end;gap:2px}
+.ib{width:36px;height:36px;background:none;border:0;border-radius:6px;color:var(--muted);cursor:pointer;font-size:15px;line-height:36px;padding:0;text-align:center}
+.ib:hover{background:var(--chip);color:var(--text)}.ib.on{color:var(--accent-hi)}.ib:disabled{cursor:default}
+.det{padding:8px 8px 12px 86px;background:var(--panel)}.det .dacts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.det .stores{font-size:12.5px}
+.isim{margin-left:0}
+@container (max-width:780px){.colhead,.rw{grid-template-columns:30px 36px minmax(0,1fr) 42px 74px 76px}.colhead .lbl,.colhead .tyc,.colhead .score,.rw .lbl,.rw .tyc,.rw .score{display:none}.det{padding-left:8px}}
+#similarPanel .inner{container-type:inline-size}
+body{background:var(--bg)}
+@media (max-width:860px){#app{display:block}header{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding-bottom:16px}nav{flex-direction:row;flex-wrap:wrap}}
 </style>
 </head>
 <body>
+<div id="app">
 <header>
   <h1>Digging Tool</h1>
   <nav id="nav">
@@ -135,52 +163,58 @@ details.sect:not([open])>summary::before{content:'▸ '}
     <button data-tab="playlists">Playlists</button>
     <button data-tab="settings">Instellingen</button>
   </nav>
+  <div id="sideFilters">
+    <h2>Zoekopdracht</h2>
+    <label>Preset
+      <select id="preset">
+        <option value="">Kies een preset…</option>
+        <option value="hypnotic|4|5">Hypnotic peak time (4–5)</option>
+        <option value="hypnotic,minimal|3|4">Hypnotic rollers (3–4)</option>
+        <option value="deep,dub|1|3">Deep &amp; dub warm-up (1–3)</option>
+        <option value="minimal|2|3">Minimal fillers (2–3)</option>
+        <option value="ambient|1|2">Ambient verhalen (1–2)</option>
+        <option value="broken|3|5">Broken &amp; energiek (3–5)</option>
+        <option value="|1|5">Geen doel (alles)</option>
+      </select>
+    </label>
+    <div class="row" id="typeChips" style="gap:4px"></div>
+    <label>Richting
+      <select id="popMode">
+        <option value="gems" selected>Verborgen parels</option>
+        <option value="neutral">Neutraal</option>
+        <option value="classics">Klassiekers</option>
+      </select>
+    </label>
+    <div class="two">
+      <label>Energie van
+        <select id="enMin"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+      </label>
+      <label>tot
+        <select id="enMax"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
+      </label>
+    </div>
+    <label>Vanaf jaar <input id="minYear" type="number" placeholder="bv. 1995"></label>
+    <label>Stijl-filter
+      <select id="styleFilter"><option value="">Alle</option></select>
+    </label>
+    <select id="typeFilter" hidden><option value=""></option></select>
+    <label class="chk"><input type="checkbox" id="onlyDigital" style="width:auto"> Alleen digitaal</label>
+    <button class="btn primary" id="genBtn">Genereer aanbevelingen</button>
+  </div>
   <span id="status"></span>
 </header>
 <main>
+<div id="searchWrap">
+  <input id="searchQ" type="search" autocomplete="off" placeholder="Zoek een track en krijg aanbevelingen op basis daarvan" aria-label="Track zoeken">
+  <div id="searchRes" hidden></div>
+</div>
 
 <section id="tab-recs" class="on">
-  <div class="card">
-    <div class="row">
-      <button class="btn primary" id="genBtn">Genereer aanbevelingen</button>
-      <label class="small muted">Richting
-        <select id="popMode" style="width:auto">
-          <option value="gems" selected>Verborgen parels</option>
-          <option value="neutral">Neutraal</option>
-          <option value="classics">Klassiekers</option>
-        </select>
-      </label>
-      <label class="small muted">Vanaf jaar <input id="minYear" type="number" placeholder="bv. 1995" style="width:100px"></label>
-      <label class="small muted">Stijl-filter
-        <select id="styleFilter" style="width:auto"><option value="">Alle</option></select>
-      </label>
-      <label class="small muted"><input type="checkbox" id="onlyDigital" style="width:auto"> Alleen digitaal beschikbaar</label>
-      <select id="typeFilter" hidden><option value=""></option></select>
-      <label class="small muted">Energie
-        <select id="enMin" style="width:auto"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-        tot <select id="enMax" style="width:auto"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option></select>
-      </label>
-    </div>
-    <div class="steer">
-      <div class="row" style="gap:8px">
-        <b class="small">Waar zoek je naar?</b>
-        <select id="preset" style="width:auto" class="small">
-          <option value="">Kies een preset…</option>
-          <option value="hypnotic|4|5">Hypnotic peak time (hypnotic, energie 4–5)</option>
-          <option value="hypnotic,minimal|3|4">Hypnotic rollers (hypnotic/minimal, 3–4)</option>
-          <option value="deep,dub|1|3">Deep & dub warm-up (deep/dub, 1–3)</option>
-          <option value="minimal|2|3">Minimal fillers (minimal, 2–3)</option>
-          <option value="ambient|1|2">Ambient verhalen (ambient, 1–2)</option>
-          <option value="broken|3|5">Broken & energiek (broken beat, 3–5)</option>
-          <option value="|1|5">Geen doel (alles)</option>
-        </select>
-      </div>
-      <div class="row" id="typeChips" style="gap:6px;margin-top:8px"></div>
-      <div class="small muted" style="margin-top:6px">Het doel stuurt het hele zoeken: je sets wegen zwaarder naarmate ze beter passen, en de app luistert de kandidaten af en zet tracks die passen bovenaan. Energie stel je in met "Energie … tot …" hierboven.</div>
-    </div>
-    <div class="progress" id="genProg" hidden><div></div></div>
-    <div class="small muted" id="genMsg"></div>
-  </div>
+  <div class="progress" id="genProg" hidden><div></div></div>
+  <div class="small muted" id="genMsg" style="margin-bottom:8px"></div>
+  <div class="toolbar" id="pushBar"></div>
+  <div class="toolbar" id="viewTabs"></div>
+  <div id="searchRecs"></div>
   <div id="recList"><div class="empty">Importeer eerst een paar sets, en klik dan op "Genereer aanbevelingen".</div></div>
 </section>
 
@@ -266,6 +300,7 @@ details.sect:not([open])>summary::before{content:'▸ '}
   </div>
 </section>
 </main>
+</div>
 
 <div id="player">
   <div class="row">
@@ -276,6 +311,7 @@ details.sect:not([open])>summary::before{content:'▸ '}
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
       <button class="btn small" id="plNext" title="Volgende (N)">⏭ Volgende</button>
+      <button class="btn small" id="plFull" hidden title="Schakel van de 30 seconden preview naar de hele track">Hele track</button>
       <select id="plSrc" class="small" style="width:auto;padding:3px 6px" title="Waar volledige tracks vandaan komen">
         <option value="auto">Volledig: auto (SoundCloud met waveform eerst)</option><option value="youtube">Volledig: YouTube</option><option value="spotify">Volledig: Spotify</option>
         <option value="soundcloud">Volledig: SoundCloud</option><option value="deezer">Volledig: Deezer</option><option value="preview">Alleen preview (waveform)</option>
@@ -311,7 +347,11 @@ function loadState(){
   try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) {}
   return Object.assign({token:'', sets:[], likes:[], skips:[], lastRecs:[], energy:{}, playlists:[], types:{}, bans:[], shown:{}}, s);
 }
-function save(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){ console.warn(e); } scheduleBackup(); }
+let lsTimer = null;
+function flushLS(){ if (lsTimer === null) return; clearTimeout(lsTimer); lsTimer = null; try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){ console.warn(e); } }
+function save(){ clearTimeout(lsTimer); lsTimer = setTimeout(flushLS, 500); scheduleBackup(); }
+window.addEventListener('pagehide', flushLS);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushLS(); });
 // Automatic backup to digging-data.json in the app folder (through the local server), so browser storage can never lose your data
 const SERVED = /^https?:$/.test(location.protocol) && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 let backupTimer = null, backupReady = false;
@@ -1217,6 +1257,11 @@ function refreshBadges(key){
     b.classList.toggle('manual', !!rec.manual);
     b.title = (rec.manual ? 'Zelf ingesteld' : 'Gemeten: ' + rec.why) + ' · klik om aan te passen';
   });
+  document.querySelectorAll('.bpmc[data-bk]').forEach(b => {
+    if (key && b.dataset.bk !== key) return;
+    const e = state.energy[b.dataset.bk]; if (!e) return;
+    const m = e.bpm || (/(\d+) BPM/.exec(e.why || '') || [])[1]; if (m) b.textContent = m;
+  });
 }
 // click a badge: pick 1-5 by where you click on the bars (or cycle on the number)
 document.addEventListener('click', e => {
@@ -1527,7 +1572,7 @@ async function measureEnergy(c){
   save();
   return state.energy[key] || r;
 }
-let enQueue = [], enBusy = false;
+let enQueue = [], enBusy = false, playBusyUntil = 0;
 const enQueued = new Set();
 function queueEnergy(list){
   list.forEach(c => { if (!c) return; const k = enKey(c), h = state.energy[k], t = state.types[k];
@@ -1539,33 +1584,16 @@ function queueEnergy(list){
 async function runEnergy(){
   if (enBusy) return; enBusy = true;
   while (enQueue.length){
+    // starting a track goes first; between tracks the page gets room to breathe
+    while (Date.now() < playBusyUntil) await sleep(300);
     const c = enQueue.shift();
+    await sleep(120);
     try { await measureEnergy(c); refreshBadges(enKey(c)); refreshTypes(enKey(c)); applyDigitalFilter(); } catch(e){}
   }
   enBusy = false;
   document.querySelectorAll('.en[data-ek]').forEach(b => { if (!state.energy[b.dataset.ek]){ b.querySelector('b').textContent = '?'; b.title = 'Geen preview gevonden om energie te meten · klik om zelf in te stellen'; } });
 }
 
-function drawWave(){
-  const cv = $('#wave'), dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth, h = cv.clientHeight;
-  if (cv.width !== w * dpr){ cv.width = w * dpr; cv.height = h * dpr; }
-  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const prog = audio.duration ? audio.currentTime / audio.duration : 0;
-  const css = getComputedStyle(document.documentElement);
-  const on = css.getPropertyValue('--accent').trim(), off = '#4a4f55';
-  if (peaks){
-    const bw = w / peaks.length;
-    for (let i = 0; i < peaks.length; i++){
-      const v = Math.max(0.03, peaks[i]) * (h - 6);
-      g.fillStyle = i / peaks.length < prog ? on : off;
-      g.fillRect(i * bw, (h - v) / 2, Math.max(1, bw - 0.6), v);
-    }
-  } else {
-    g.fillStyle = off; g.fillRect(0, h / 2 - 2, w, 4);
-    g.fillStyle = on; g.fillRect(0, h / 2 - 2, w * prog, 4);
-  }
-}
 const fmtT = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 // One interface over every player: 30s preview (<audio>), YouTube, Spotify, SoundCloud, Deezer widget
 let eng = null, engName = '', engNote = '';
@@ -1577,10 +1605,12 @@ audio.onerror = async () => {
   if (eng !== audioEng) return;
   const it = queue[qi]; if (!it || it.refreshed || !it.dzTrackId) return;
   it.refreshed = true;
-  try { const tr = await dz('/track/' + it.dzTrackId, {}, 0); if (tr && tr.preview){ it.preview = tr.preview; playPreview(it, qi); } } catch(e){}
+  try { const tr = await dz('/track/' + it.dzTrackId, {}, 0); if (tr && tr.preview){ it.preview = tr.preview; playPreview(it, qi, engNote); } } catch(e){}
 };
 $('#wave').onclick = e => { if (!eng || !eng.dur()) return; const r = e.target.getBoundingClientRect(); eng.seek((e.clientX - r.left) / r.width * eng.dur()); drawWave(); };
-$('#plBtn').onclick = () => eng && eng.toggle();
+let userPaused = false;
+$('#plBtn').onclick = () => { if (eng){ userPaused = true; eng.toggle(); } };
+$('#plFull').onclick = () => switchToFull(playToken);
 $('#plNext').onclick = () => playIndex(qi + 1);
 $('#plSrc').value = state.playerPref || 'auto';
 $('#plSrc').onchange = () => { state.playerPref = $('#plSrc').value; save(); if (queue[qi]) playIndex(qi); };
@@ -1588,7 +1618,7 @@ window.addEventListener('resize', drawWave);
 document.addEventListener('keydown', e => {
   if (e.target.matches('input,textarea,select') || !$('#player').classList.contains('on') || !eng) return;
   const step = e.shiftKey ? 30 : 10;
-  if (e.code === 'Space'){ e.preventDefault(); eng.toggle(); }
+  if (e.code === 'Space'){ e.preventDefault(); userPaused = true; eng.toggle(); }
   else if (e.key === 'ArrowRight'){ e.preventDefault(); eng.seek(Math.min(eng.dur() - 1, eng.pos() + step)); }
   else if (e.key === 'ArrowLeft'){ e.preventDefault(); eng.seek(Math.max(0, eng.pos() - step)); }
   else if (/^[1-9]$/.test(e.key) && eng.dur()){ eng.seek(eng.dur() * +e.key / 10); }
@@ -1600,38 +1630,43 @@ setInterval(() => {
   $('#plBtn').textContent = eng.paused() ? '▶' : '❚❚';
   if (eng.kind !== 'preview'){
     drawWave();
-    $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName;
+    $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName + (waveIsImpression() ? ' · golf uit de preview, niet exact' : '');
   } else {
     drawWave();
     $('#plInfo').textContent = fmtT(audio.currentTime) + ' / ' + fmtT(audio.duration) + ' · preview' + (engNote ? ' (' + engNote + ')' : '');
   }
 }, 250);
 
+// Bars are rendered once per track into two offscreen layers; each tick only copies them, so drawing costs nothing.
+let waveC = null, prevPeaks = null;
+function waveLayers(src, w, h, dpr){
+  if (waveC && waveC.src === src && waveC.w === w && waveC.h === h) return waveC;
+  const mk = paint => { const c = document.createElement('canvas'); c.width = w * dpr; c.height = h * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr); paint(g); return c; };
+  const bars = (g, fill) => { g.fillStyle = fill; const n = Math.floor(w / 3), st = src.length / n; for (let i = 0; i < n; i++){ let m = 0; for (let j = Math.floor(i * st), e = Math.floor((i + 1) * st); j < e; j++) if (src[j] > m) m = src[j]; const v = Math.max(0.04, m) * (h - 6); g.fillRect(i * 3, (h - v) / 2, 2, v); } };
+  const grad = g => { const l = g.createLinearGradient(0, 0, w, 0); l.addColorStop(0, '#8f1d17'); l.addColorStop(1, '#e0702a'); return l; };
+  return waveC = {src, w, h, off: mk(g => bars(g, '#54403a')), on: mk(g => bars(g, grad(g)))};
+}
 function drawWave(){
   const cv = $('#wave'), dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (!w) return;
   if (cv.width !== w * dpr){ cv.width = w * dpr; cv.height = h * dpr; }
-  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
   const prog = eng && eng.dur() ? eng.pos() / eng.dur() : 0;
-  const css = getComputedStyle(document.documentElement);
-  const on = css.getPropertyValue('--accent').trim(), off = '#4a4f55';
-  if (peaks && eng && (eng === audioEng || eng.kind === 'spotify' || eng.kind === 'soundcloud')){
-    const bw = w / peaks.length;
-    for (let i = 0; i < peaks.length; i++){
-      const v = Math.max(0.03, peaks[i]) * (h - 6);
-      g.fillStyle = i / peaks.length < prog ? on : off;
-      g.fillRect(i * bw, (h - v) / 2, Math.max(1, bw - 0.6), v);
-    }
+  const src = peaks || prevPeaks;
+  if (src){
+    const L = waveLayers(src, w, h, dpr), x = Math.round(cv.width * prog);
+    g.drawImage(L.off, 0, 0);
+    if (x > 0) g.drawImage(L.on, 0, 0, x, cv.height, 0, 0, x, cv.height);
+    g.fillStyle = '#ffd9bf'; if (eng && eng.dur()) g.fillRect(x, 0, dpr, cv.height);
   } else {
-    // full track: timeline with 10% marks, click or press 1-9 to jump
-    g.fillStyle = off; g.fillRect(0, h / 2 - 3, w, 6);
-    g.fillStyle = on; g.fillRect(0, h / 2 - 3, w * prog, 6);
-    g.fillStyle = '#6a7077';
-    for (let k = 1; k < 10; k++) g.fillRect(Math.round(w * k / 10), h / 2 - 9, 1, 18);
-    g.fillStyle = on; g.beginPath(); g.arc(w * prog, h / 2, 7, 0, Math.PI * 2); g.fill();
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#54403a'; g.fillRect(0, h / 2 - 2, w, 4);
+    g.fillStyle = '#e0702a'; g.fillRect(0, h / 2 - 2, w * prog, 4);
   }
 }
+// true when the bars come from the 30s fragment while a full track is playing: then they are an impression, not exact
+const waveIsImpression = () => !peaks && !!prevPeaks && eng && eng !== audioEng;
 
 /* --- Spotify account (PKCE login, no client secret needed) --- */
 const SP_REDIRECT = location.origin + location.pathname;
@@ -1710,13 +1745,24 @@ async function spSearch(artist, title){
 
 /* --- full-length players --- */
 // song.link turns a Deezer track into Spotify / YouTube / SoundCloud links (free, ~10 lookups per minute)
-async function fullLinks(it){
+const linkP = new Map();
+function fullLinks(it){
+  const k = it.dzTrackId || (it.artist + '|' + it.title);
+  if (!linkP.has(k)) linkP.set(k, fullLinksRaw(it).finally(() => setTimeout(() => linkP.delete(k), 60000)));
+  return linkP.get(k);
+}
+async function peekLinks(it){
+  if (!it.dzTrackId) return null;
+  const hit = await idb.get('sl:' + it.dzTrackId);
+  return hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud) ? hit.d : null;
+}
+async function fullLinksRaw(it){
   let id = it.dzTrackId;
   if (!id){ try { const pv = await findPreview(it.artist, it.title); const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; } catch(e){} }
   const out = {deezer: id || null};
   if (!id){ out.sl = 'overgeslagen (niet op Deezer)'; if (spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; } if (!out.spotify){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; } out.diag = diagOf(out); return out; }
   const key = 'sl:' + id, hit = await idb.get(key);
-  if (hit && Date.now() - hit.t < 30 * 864e5 && hit.d.youtube){ if (!Array.isArray(hit.d.youtube)) hit.d.youtube = [hit.d.youtube]; return hit.d; }
+  if (hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud)){ if (hit.d.youtube && !Array.isArray(hit.d.youtube)) hit.d.youtube = [hit.d.youtube]; return hit.d; }
   try {
     const r = await fetch('https://api.song.link/v1-alpha.1/links?userCountry=NL&url=' + encodeURIComponent('https://www.deezer.com/track/' + id));
     out.sl = r.ok ? 'ok' : r.status === 429 ? 'limiet' : 'HTTP ' + r.status;
@@ -1732,7 +1778,7 @@ async function fullLinks(it){
   if (!out.spotify && spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; }
   if (!out.youtube && !(out.spotify && spConnected() && (state.spUser || {}).premium)){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; }
   out.diag = diagOf(out);
-  if (out.youtube || out.spotify) idb.set(key, {t: Date.now(), d: out});
+  if (out.youtube || out.spotify || out.soundcloud) idb.set(key, {t: Date.now(), d: out});
   return out;
 }
 function diagOf(o){
@@ -1762,21 +1808,22 @@ async function ytSearch(artist, title){
     const vs = d ? (d.items || []).filter(x => good(x.snippet.title, x.snippet.channelTitle)).map(x => x.id.videoId) : [];
     if (vs.length) found = {ids: vs.slice(0, 4), via: 'YouTube API'};
   }
-  for (const base of PIPED){
-    if (found) break;
-    const d = await fetchJSON(base + '/search?filter=videos&q=' + encodeURIComponent(q));
-    const vs = d ? (d.items || []).filter(x => x.url && good(x.title, x.uploaderName)).map(x => (x.url.match(/v=([\w-]{11})/) || [])[1]).filter(Boolean) : [];
-    if (vs.length) found = {ids: vs.slice(0, 4), via: 'Piped'};
-  }
-  for (const base of INVID){
-    if (found) break;
-    const d = await fetchJSON(base + '/api/v1/search?type=video&q=' + encodeURIComponent(q));
-    const vs = Array.isArray(d) ? d.filter(x => x.videoId && good(x.title, x.author)).map(x => x.videoId) : [];
-    if (vs.length) found = {ids: vs.slice(0, 4), via: 'Invidious'};
+  // ask all public mirrors at once and take the first useful answer, instead of waiting for dead ones one by one
+  if (!found){
+    const tries = PIPED.map(base => fetchJSON(base + '/search?filter=videos&q=' + encodeURIComponent(q), 3500).then(d => {
+      const vs = d ? (d.items || []).filter(x => x.url && good(x.title, x.uploaderName)).map(x => (x.url.match(/v=([\w-]{11})/) || [])[1]).filter(Boolean) : [];
+      if (!vs.length) throw 0; return {ids: vs.slice(0, 4), via: 'Piped'};
+    })).concat(INVID.map(base => fetchJSON(base + '/api/v1/search?type=video&q=' + encodeURIComponent(q), 3500).then(d => {
+      const vs = Array.isArray(d) ? d.filter(x => x.videoId && good(x.title, x.author)).map(x => x.videoId) : [];
+      if (!vs.length) throw 0; return {ids: vs.slice(0, 4), via: 'Invidious'};
+    })));
+    try { found = await Promise.any(tries); } catch(e){}
   }
   if (found){ found.id = found.ids[0]; idb.set(key, {t: Date.now(), d: found}); }
   return found;
 }
+// resolve-style promise that gives up after ms, so one stuck player can't block the rest
+function within(ms, msg, fn){ return new Promise((res, rej) => { const to = setTimeout(() => rej(new Error(msg)), ms); fn(v => { clearTimeout(to); res(v); }, rej); }); }
 function loadScript(src, readyName){
   return new Promise((res, rej) => {
     if (readyName){ const prev = window[readyName]; window[readyName] = a => { if (prev) try { prev(a); } catch(e){} res(a); }; }
@@ -1821,13 +1868,13 @@ async function playYouTube(ids, token){
     showEmbed('ytWrap');
     $('#ytBox').outerHTML = `<iframe id="ytBox" width="240" height="135" src="https://www.youtube.com/embed/${ytIds[0]}?autoplay=1&playsinline=1&rel=0&origin=${encodeURIComponent(location.origin)}" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" frameborder="0"></iframe>`;
     engName = 'YouTube (eenvoudige speler: bediening in de video)';
-    eng = {kind: 'youtube', toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ const f = $('#ytBox'); if (f && f.tagName === 'IFRAME') f.src = 'about:blank'; }};
+    eng = {kind: 'youtube', simple: true, toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ const f = $('#ytBox'); if (f && f.tagName === 'IFRAME') f.src = 'about:blank'; }};
     return;
   }
   showEmbed('ytWrap');
   if (!ytP || !ytP.loadVideoById){
     if ($('#ytBox').tagName === 'IFRAME') $('#ytBox').outerHTML = '<div id="ytBox"></div>';
-    await new Promise(res => {
+    await within(9000, 'YouTube-speler start niet', res => {
       ytP = new YT.Player('ytBox', {width: 240, height: 135, videoId: ytIds[0],
         playerVars: {autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin, widget_referrer: location.href},
         events: {
@@ -1848,9 +1895,10 @@ async function playSpotify(uri, token){
   spApi = spApi || loadScript('https://open.spotify.com/embed/iframe-api/v1', 'onSpotifyIframeApiReady');
   const api = await spApi;
   spToken = token;
+  spSt = {position: 0, duration: 0, isPaused: true};
   showEmbed('spWrap');
   if (!spCtl){
-    await new Promise(res => api.createController($('#spBox'), {uri, width: '100%', height: 80}, c => {
+    await within(9000, 'Spotify-speler start niet', res => api.createController($('#spBox'), {uri, width: '100%', height: 80}, c => {
       spCtl = c;
       c.addListener('playback_update', e => {
         const d = e.data; spSt = {position: d.position / 1000, duration: d.duration / 1000, isPaused: d.isPaused};
@@ -1859,7 +1907,7 @@ async function playSpotify(uri, token){
       });
       c.addListener('ready', () => { c.play(); res(); });
     }));
-  } else { spLast = 0; spCtl.loadUri(uri); setTimeout(() => spCtl.play(), 400); }
+  } else { spLast = 0; spCtl.loadUri(uri); setTimeout(() => { if (token === playToken) spCtl.play(); }, 400); }
   engName = 'Spotify';
   spWave(uri, token);
   eng = {kind: 'spotify', toggle(){ spCtl.togglePlay(); }, seek(t){ spCtl.seek(t); }, pos: () => spSt.position, dur: () => spSt.duration, paused: () => spSt.isPaused, stop(){ spCtl.pause(); }};
@@ -1918,18 +1966,24 @@ async function playSoundCloud(url, token){
   scApi = scApi || loadScript('https://w.soundcloud.com/player/api.js');
   await scApi;
   scToken = token;
+  scSt = {pos: 0, dur: 0, paused: true};
   showEmbed('scFrame');
   const fr = $('#scFrame');
-  fr.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(url) + '&auto_play=true&visual=false&show_comments=false&hide_related=true&color=%23c8f04a';
-  scW = SC.Widget(fr);
-  scW.bind(SC.Widget.Events.READY, () => { scW.play(); scW.getDuration(d => scSt.dur = d / 1000); scW.getCurrentSound(snd => {
+  const ready = () => { if (token !== playToken) return; scW.play(); scW.getDuration(d => { if (token === playToken) scSt.dur = d / 1000; }); scW.getCurrentSound(snd => {
+    if (token !== playToken) return;
     if (snd && (snd.policy === 'SNIP' || (snd.full_duration && snd.duration && snd.duration < snd.full_duration - 2000))){ nextSource(token); return; }
     scWave(snd, token);
-  }); });
-  scW.bind(SC.Widget.Events.PLAY_PROGRESS, e => { scSt.pos = e.currentPosition / 1000; scSt.paused = false; });
-  scW.bind(SC.Widget.Events.PAUSE, () => scSt.paused = true);
-  scW.bind(SC.Widget.Events.FINISH, () => { if (scToken === playToken) playIndex(qi + 1); });
-  scW.bind(SC.Widget.Events.ERROR, () => nextSource(scToken));
+  }); };
+  if (!scW){
+    // one widget for the whole session: bind once, later tracks are loaded into it
+    fr.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(url) + '&auto_play=true&visual=false&show_comments=false&hide_related=true&color=%23b84a14';
+    scW = SC.Widget(fr);
+    scW.bind(SC.Widget.Events.READY, () => ready());
+    scW.bind(SC.Widget.Events.PLAY_PROGRESS, e => { scSt.pos = e.currentPosition / 1000; scSt.paused = false; });
+    scW.bind(SC.Widget.Events.PAUSE, () => scSt.paused = true);
+    scW.bind(SC.Widget.Events.FINISH, () => { if (scToken === playToken) playIndex(qi + 1); });
+    scW.bind(SC.Widget.Events.ERROR, () => nextSource(scToken));
+  } else scW.load(url, {auto_play: true, visual: false, show_comments: false, hide_related: true, callback: ready});
   engName = 'SoundCloud';
   eng = {kind: 'soundcloud', toggle(){ scW.toggle(); }, seek(t){ scW.seekTo(t * 1000); }, pos: () => scSt.pos, dur: () => scSt.dur, paused: () => scSt.paused, stop(){ scW.pause(); }};
 }
@@ -1938,7 +1992,26 @@ function playDeezer(id){
   showEmbed('dzFrame');
   $('#dzFrame').src = 'https://widget.deezer.com/widget/dark/track/' + id + '?autoplay=true&tracklist=false';
   engName = 'Deezer (bediening in de Deezer-speler)';
-  eng = {kind: 'deezer', toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ $('#dzFrame').src = 'about:blank'; }};
+  eng = {kind: 'deezer', simple: true, toggle(){}, seek(){}, pos: () => 0, dur: () => 0, paused: () => false, stop(){ $('#dzFrame').src = 'about:blank'; }};
+}
+// Embedded players sometimes accept a track and then simply don't start. Check it, and move on when that happens.
+let watchT = null;
+function watchStart(token, src){
+  clearInterval(watchT);
+  if (!eng || eng.simple) return;
+  const t0 = Date.now(); let p0 = null;
+  watchT = setInterval(() => {
+    if (token !== playToken || userPaused || !eng){ clearInterval(watchT); return; }
+    const pos = eng.pos();
+    if (p0 === null) p0 = pos;
+    if (!eng.paused() && pos > p0 + 0.2){ clearInterval(watchT); return; }
+    if (Date.now() - t0 > 7000){
+      clearInterval(watchT);
+      lastLinks.diag = (lastLinks.diag || '') + ' · ' + src + ' startte niet';
+      try { eng.stop(); } catch(e){}
+      nextSource(token);
+    }
+  }, 500);
 }
 async function startNextSource(token){
   const it = queue[qi];
@@ -1949,62 +2022,120 @@ async function startNextSource(token){
       else if (src === 'spotify') await playSpotify(val, token);
       else if (src === 'soundcloud') await playSoundCloud(val, token);
       else if (src === 'deezer') playDeezer(val);
+      if (token === playToken) watchStart(token, src);
       return;
-    } catch(e){ console.warn(src, e); srcIdx++; }
+    } catch(e){ console.warn(src, e); srcIdx++; if (token !== playToken) return; }
   }
   if (token === playToken) playPreview(it, qi, 'volledige versie kon niet spelen', (lastLinks.diag || '') + ' · afspelen mislukt');
 }
 
 // queue items: {artist, title, preview?, dzTrackId?}
 function playQueue(items, start = 0){ queue = items; playIndex(start); }
+function setSources(L, pref){
+  // Deezer's widget only works when logged in to Deezer, so it's only used when chosen explicitly
+  const autoFirst = spConnected() && (state.spUser || {}).premium ? 'spotify' : 'youtube';
+  const order = pref === 'deezer' ? ['deezer', 'youtube', 'spotify', 'soundcloud']
+    : pref === 'auto' ? [...new Set(['soundcloud', autoFirst, 'youtube', 'spotify'])]
+    : [...new Set([pref, autoFirst, 'youtube', 'spotify', 'soundcloud'])];
+  srcList = order.filter(k => L[k]).map(k => [k, L[k]]); srcIdx = 0;
+  lastLinks = L;
+  return srcList.length > 0;
+}
+function switchToFull(token){
+  if (token !== playToken || !srcList.length) return;
+  $('#plFull').hidden = true;
+  $('#plDiag').textContent = '';
+  try { audio.pause(); } catch(e){}
+  userPaused = false;
+  startNextSource(token);
+}
+// A usable preview link: Deezer's links expire, so fetch a fresh one when needed
+async function previewUrl(it){
+  const exp = /exp=(\d+)/.exec(it.preview || '');
+  const stale = exp && +exp[1] * 1000 < Date.now() + 60000;
+  if (it.preview && !stale) return it.preview;
+  if (it.dzTrackId){ try { const tr = await dz('/track/' + it.dzTrackId, {}, stale ? 0 : 6 * 36e5); if (tr && tr.preview) return it.preview = tr.preview; } catch(e){} }
+  const pv = await findPreview(it.artist, it.title);
+  if (pv.preview) it.preview = pv.preview;
+  return pv.preview || null;
+}
+function loadPrevPeaks(url, token){
+  if (!url) return;
+  computePeaks(url).then(p => { if (token === playToken && !peaks){ prevPeaks = p; drawWave(); } }).catch(() => {});
+}
 async function playIndex(i){
   if (i < 0 || i >= queue.length) return;
   qi = i;
   const token = ++playToken;
   const it = queue[i];
+  clearInterval(watchT);
   stopAll();
+  userPaused = false;
+  playBusyUntil = Date.now() + 5000;
   $('#player').classList.add('on');
   $('#plTitle').textContent = it.artist + ' – ' + it.title;
-  peaks = null; eng = null; drawWave();
+  $('#plFull').hidden = true;
+  $('#plDiag').textContent = '';
+  peaks = null; prevPeaks = null; eng = null; srcList = []; drawWave();
   const pref = state.playerPref || 'auto';
-  if (pref !== 'preview'){
-    $('#plInfo').textContent = 'Volledige track zoeken…';
-    const L = await fullLinks(it);
-    if (token !== playToken) return;
-    // Deezer's widget only works when logged in to Deezer, so it's only used when chosen explicitly
-    const autoFirst = spConnected() && (state.spUser || {}).premium ? 'spotify' : 'youtube';
-    const order = pref === 'deezer' ? ['deezer', 'youtube', 'spotify', 'soundcloud']
-      : pref === 'auto' ? [...new Set(['soundcloud', autoFirst, 'youtube', 'spotify'])]
-      : [...new Set([pref, autoFirst, 'youtube', 'spotify', 'soundcloud'])];
-    srcList = order.filter(k => L[k]).map(k => [k, L[k]]); srcIdx = 0;
-    lastLinks = L;
-    if (srcList.length){ startNextSource(token); return; }
-    playPreview(it, i, 'geen volledige versie gevonden', L.diag || diagOf(L));
+  if (pref === 'preview'){ playPreview(it, i, ''); return; }
+  // full version already known: start it straight away, the bars come from the preview in the background
+  const known = await peekLinks(it);
+  if (token !== playToken) return;
+  if (known && setSources(known, pref)){
+    startNextSource(token);
+    previewUrl(it).then(u => loadPrevPeaks(u, token)).catch(() => {});
+    prefetchNext(i, token);
     return;
   }
-  playPreview(it, i, '');
+  // otherwise: never make you wait in silence. The preview plays while the full version is looked up.
+  const t0 = Date.now();
+  const pvP = playPreview(it, i, 'hele track zoeken', null, true);
+  let L = {};
+  try { L = await within(15000, 'te traag', (res, rej) => fullLinks(it).then(res, rej)); } catch(e){ L = {sl: 'te traag'}; }
+  if (token !== playToken) return;
+  const hadPreview = await pvP;
+  if (token !== playToken) return;
+  if (setSources(L, pref)){
+    prefetchNext(i, token);
+    if (hadPreview && (userPaused || Date.now() - t0 > 8000)){ engNote = ''; $('#plFull').hidden = false; }   // don't jump back to the start while you're listening
+    else switchToFull(token);
+    return;
+  }
+  engNote = hadPreview ? 'geen hele track gevonden' : '';
+  if (hadPreview) showWhyPreview(it, L.diag || diagOf(L));
+  else noSound(it, i);
 }
-async function playPreview(it, i, note, diag){
+function prefetchNext(i, token){
+  setTimeout(() => { if (token === playToken && queue[i + 1] && (state.playerPref || 'auto') !== 'preview') peekLinks(queue[i + 1]).then(k => { if (!k) fullLinks(queue[i + 1]).catch(() => {}); }); }, 3000);
+}
+function showWhyPreview(it, diag){
+  const q = encodeURIComponent(it.artist + ' ' + cleanTitle(it.title));
+  const yt = lastLinks.youtube && lastLinks.youtube[0] ? 'https://www.youtube.com/watch?v=' + lastLinks.youtube[0] : 'https://www.youtube.com/results?search_query=' + q;
+  $('#plDiag').innerHTML = 'Waarom preview? ' + esc(diag) + `<br>Volledige track: <a href="${yt}" target="_blank" rel="noopener">open op YouTube</a> · <a href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">open in Spotify</a>`
+    + (spConnected() ? '' : ' · <a href="#" id="goSp"><b>Verbind Spotify</b> voor volledige tracks in de app</a>');
+}
+function noSound(it, i){
+  eng = null;
+  $('#plInfo').innerHTML = 'Niets gevonden om af te spelen. <a href="https://www.youtube.com/results?search_query=' + encodeURIComponent(it.artist + ' ' + it.title) + '" target="_blank" rel="noopener">Zoek op YouTube</a>';
+  if (queue.length > 1 && i < queue.length - 1) setTimeout(() => { if (qi === i) playIndex(i + 1); }, 2000);
+}
+// returns whether a preview could be started
+async function playPreview(it, i, note, diag, waiting){
+  const token = playToken;
   showEmbed(null);
   engNote = note || '';
-  if (diag){
-    const q = encodeURIComponent(it.artist + ' ' + cleanTitle(it.title));
-    const yt = lastLinks.youtube && lastLinks.youtube[0] ? 'https://www.youtube.com/watch?v=' + lastLinks.youtube[0] : 'https://www.youtube.com/results?search_query=' + q;
-    $('#plDiag').innerHTML = 'Waarom preview? ' + esc(diag) + `<br>Volledige track: <a href="${yt}" target="_blank" rel="noopener">open op YouTube</a> · <a href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">open in Spotify</a>`
-      + (spConnected() ? '' : ' · <a href="#" id="goSp"><b>Verbind Spotify</b> voor volledige tracks in de app</a>');
-  } else $('#plDiag').textContent = '';
+  if (diag) showWhyPreview(it, diag);
   $('#plInfo').textContent = note || 'Preview zoeken…';
-  let pv = it.preview ? {preview: it.preview} : await findPreview(it.artist, it.title);
-  if (qi !== i) return;
-  if (!pv.preview){
-    $('#plInfo').innerHTML = 'Niets gevonden om af te spelen. <a href="https://www.youtube.com/results?search_query=' + encodeURIComponent(it.artist + ' ' + it.title) + '" target="_blank" rel="noopener">Zoek op YouTube</a>';
-    if (queue.length > 1 && i < queue.length - 1) setTimeout(() => { if (qi === i) playIndex(i + 1); }, 2000);
-    return;
-  }
+  const url = await previewUrl(it).catch(() => null);
+  if (token !== playToken) return false;
+  if (!url){ if (!waiting) noSound(it, i); return false; }
   eng = audioEng; engName = 'preview';
-  audio.src = pv.preview;
-  audio.play().catch(() => {});
-  computePeaks(pv.preview).then(p => { if (qi === i && eng === audioEng){ peaks = p; drawWave(); } }).catch(() => {});
+  audio.src = url;
+  // browsers can refuse to start sound on their own: say so instead of staying silent
+  audio.play().catch(err => { if (token === playToken && err && err.name === 'NotAllowedError') engNote = 'klik op ▶ om te starten'; });
+  loadPrevPeaks(url, token);
+  return true;
 }
 
 /* ================= UI ================= */
@@ -2017,6 +2148,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => showTab(
 function showTab(t){
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
+  $('#sideFilters').style.display = t === 'recs' ? '' : 'none';
   if (t === 'profile') renderProfile();
   if (t === 'likes') renderLikes();
   if (t === 'playlists') renderPlaylists();
@@ -2026,31 +2158,46 @@ function showTab(t){
 function links(c){
   return storeLinks(c.artists.map(x => x.name).join(' '), c.source === 'deezer' ? cleanTitle(c.title) : c.releaseTitle);
 }
+const COLHEAD = '<div class="colhead"><span></span><span></span><span>Track</span><span class="lbl">Label</span><span class="r">BPM</span><span>Energie</span><span class="tyc">Type</span><span class="r score">Match</span><span></span></div>';
 function recHTML(c, i, ctx){
   const img = c.thumb ? `<img src="${esc(c.thumb)}" loading="lazy" alt="">` : '<div class="ph"></div>';
   const lab = c.labels.map(l => esc(l.name)).join(', ');
+  const title = esc(c.source === 'deezer' ? c.title : c.releaseTitle);
+  const sub = esc(c.artists.map(a => a.name).join(', ')) + (c.source === 'deezer' && c.releaseTitle ? ' · ' + esc(c.releaseTitle) : '');
+  const liked = (state.likes || []).some(l => l.releaseId === c.releaseId);
   return `<div class="rec" data-i="${i}" data-ctx="${ctx}">
-    <div style="position:relative">${img}<button class="play" data-act="playrel" style="position:absolute;right:4px;bottom:4px" title="${c.source === 'deezer' ? 'Speel preview, daarna de volgende aanbevelingen' : 'Speel previews van deze release'}">▶</button></div>
-    <div>
-      <div><span class="a">${esc(c.artists.map(a => a.name).join(', '))}</span> – <span class="t">${esc(c.source === 'deezer' ? c.title : c.releaseTitle)}</span></div>
-      <div class="small muted">${c.source === 'deezer' && c.releaseTitle ? 'van ' + esc(c.releaseTitle) + (lab ? ' · ' : '') : ''}${lab}${c.catno ? ' · ' + esc(c.catno) : ''}${c.year ? ' · ' + c.year : ''}${c.format ? ' · ' + esc(c.format) : ''}${c.want ? ' · ♥ ' + c.want : ''}</div>
-      <div>${c.fitWhy && c.fitWhy.length && c.fit >= 1.2 ? `<span class="chip fit">Past: ${esc(c.fitWhy.join(' · '))}</span>` : ''}${enBadge(c)} ${typeChips(c)}${(c.why || []).map(w => `<span class="chip why">${esc(w)}</span>`).join('')}${(c.styles || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>
-      <div class="small" style="margin-top:4px"><a href="${esc(c.uri)}" target="_blank" rel="noopener">${c.source === 'deezer' ? 'Deezer' : 'Discogs'}</a> · ${links(c)} · <a href="#" data-act="tracks">Tracklist</a> <span class="availslot" data-rid="${c.releaseId}"></span></div>
+    <div class="rw">
+      <button class="play" data-act="playrel" title="${c.source === 'deezer' ? 'Speel deze track, daarna de tracks eronder' : 'Speel deze release'}" aria-label="Speel ${title}">▶</button>
+      ${img}
+      <button class="tcell" data-act="details" aria-expanded="false" title="Details"><span class="t">${title}</span><span class="a">${sub}</span></button>
+      <span class="lbl" title="${lab}">${lab || '–'}</span>
+      <span class="bpmc" data-bk="${esc(enKey(c))}">${bpmOf(c) || '–'}</span>
+      <span class="enc">${enBadge(c)}</span>
+      <span class="tyc">${typeChips(c)}</span>
+      <span class="score">${c.score != null ? Math.round(c.score * 100) : ''}</span>
+      <span class="acts">${ctx === 'likes' ? '<button class="ib" data-act="unlike" title="Verwijder uit likes" aria-label="Verwijder uit likes">✕</button>'
+        : `<button class="ib${liked ? ' on' : ''}" data-act="like" title="Like" aria-label="Like ${title}"${liked ? ' disabled' : ''}>♥</button><button class="ib" data-act="skip" title="Skip" aria-label="Skip ${title}">✕</button>`}</span>
+    </div>
+    <div class="det" hidden>
+      <div class="small muted">${lab}${c.catno ? ' · ' + esc(c.catno) : ''}${c.year ? ' · ' + c.year : ''}${c.format ? ' · ' + esc(c.format) : ''}${c.want ? ' · ♥ ' + c.want : ''}</div>
+      <div>${c.fitWhy && c.fitWhy.length && c.fit >= 1.2 ? `<span class="chip fit">Past: ${esc(c.fitWhy.join(' · '))}</span>` : ''}${(c.why || []).map(w => `<span class="chip why">${esc(w)}</span>`).join('')}${(c.styles || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>
+      <div class="dacts">
+        <button class="btn small" data-act="addpl">+ Playlist</button>
+        <button class="btn small" data-act="inlinesim">≈ Vergelijkbaar</button>
+        <button class="btn small" data-act="similar">Similar</button>
+        <button class="btn small" data-act="tracks">Tracklist</button>
+        ${ctx === 'likes' ? '' : '<button class="btn small" data-act="ban" title="Deze track en artiest nooit meer aanbevelen, en minder van deze klank">✕ Niet mijn sound</button>'}
+      </div>
+      <div class="stores"><a href="${esc(c.uri)}" target="_blank" rel="noopener">${c.source === 'deezer' ? 'Deezer' : 'Discogs'}</a> · ${links(c)} <span class="availslot" data-rid="${c.releaseId}"></span></div>
       <div class="tl" hidden></div>
       <div class="isim" hidden></div>
-    </div>
-    <div class="acts">
-      ${c.score != null ? `<div class="score">${Math.round(c.score * 100)}</div>` : ''}
-      ${ctx === 'likes' ? '<button class="btn small" data-act="unlike">Verwijder</button>' : '<button class="btn small" data-act="like">♥ Like</button><button class="btn small" data-act="skip">Skip</button><button class="btn small" data-act="ban" title="Deze track en artiest nooit meer aanbevelen, en minder van deze klank">✕ Niet mijn sound</button>'}
-      <button class="btn small" data-act="inlinesim">≈ Vergelijkbaar</button>
-      <button class="btn small" data-act="similar">Similar</button>
-      <button class="btn small" data-act="addpl">+ Playlist</button>
     </div>
   </div>`;
 }
 const inlineLists = {};
 let inlineN = 0;
-const ctxLists = new Proxy({recs: () => state.lastRecs, sim: () => simList, likes: () => state.likes}, {
+let searchList = [];
+const ctxLists = new Proxy({recs: () => state.lastRecs, sim: () => simList, likes: () => state.likes, search: () => searchList}, {
   get: (o, k) => o[k] || (() => inlineLists[k] || []),
 });
 let simList = [];
@@ -2061,7 +2208,8 @@ document.addEventListener('click', async e => {
   const c = ctxLists[row.dataset.ctx]()[+row.dataset.i];
   if (!c) return;
   const act = b.dataset.act;
-  if (act === 'like'){ if (!state.likes.some(l => l.releaseId === c.releaseId)) state.likes.unshift(strip(c)); save(); b.textContent = '♥ Geliked'; b.disabled = true; }
+  if (act === 'details'){ const d = row.querySelector(':scope > .det'); d.hidden = !d.hidden; b.setAttribute('aria-expanded', String(!d.hidden)); return; }
+  if (act === 'like'){ if (!state.likes.some(l => l.releaseId === c.releaseId)) state.likes.unshift(strip(c)); save(); b.classList.add('on'); b.disabled = true; }
   if (act === 'skip'){ state.skips.push({releaseId: c.releaseId, masterId: c.masterId, artists: c.artists, releaseTitle: c.releaseTitle}); save(); row.style.opacity = .3; }
   if (act === 'ban'){
     const e = state.energy[enKey(c)];
@@ -2077,9 +2225,12 @@ document.addEventListener('click', async e => {
   if (act === 'tracks') toggleTracks(row, c);
   if (act === 'playrel'){
     if (c.source === 'deezer'){
+      // the queue is what you see: this row and the rows below it, in screen order
       const list = ctxLists[row.dataset.ctx]();
-      const items = list.map((x, j) => ({x, j})).filter(o => o.j >= +row.dataset.i && o.x.source === 'deezer')
-        .map(o => ({artist: o.x.artists.map(a => a.name).join(', '), title: o.x.title, preview: o.x.preview, dzTrackId: o.x.dzTrackId}));
+      const rows = [...document.querySelectorAll(`.rec[data-ctx="${row.dataset.ctx}"]`)].filter(r => r.offsetParent !== null);
+      const from = Math.max(0, rows.indexOf(row));
+      const items = rows.slice(from).map(r => list[+r.dataset.i]).filter(x => x && x.source === 'deezer')
+        .map(x => ({artist: x.artists.map(a => a.name).join(', '), title: x.title, preview: x.preview, dzTrackId: x.dzTrackId}));
       playQueue(items, 0);
     } else playRelease(c);
   }
@@ -2209,10 +2360,12 @@ async function measureMany(list, onStep){
   await Promise.all([worker(), worker(), worker(), worker()]);
 }
 
-function applyDigitalFilter(){
+let adfT = null;
+function applyDigitalFilter(){ clearTimeout(adfT); adfT = setTimeout(applyDigitalNow, 120); }
+function applyDigitalNow(){
   const only = $('#onlyDigital').checked;
   const lo = +$('#enMin').value, hi = +$('#enMax').value;
-  document.querySelectorAll('#recList .rec, #simList .rec').forEach(r => {
+  document.querySelectorAll('#recList .rec, #simList .rec, #searchRecs .rec').forEach(r => {
     const c = ctxLists[r.dataset.ctx]()[+r.dataset.i];
     const e = c && energyOf(c);
     const tt = (state.target || {}).types || [], ty = c && typesOf(c);
@@ -2315,18 +2468,163 @@ const SECTIONS = [
   ['label', 'Nieuw op je labels', 'Andere artiesten op de labels die je het meest draait.'],
   ['known', 'Meer van artiesten die je al draait', 'Tracks van je eigen artiesten die nog niet in je sets zitten.'],
 ];
+let recView = 'all', pushBusy = null;
+function recGroups(){
+  const R = state.lastRecs || [], idx = R.map((c, i) => i), out = [];
+  [...new Set(R.filter(c => c.pushType).map(c => c.pushType))].forEach(k => {
+    const ids = idx.filter(i => R[i].pushType === k), exact = ids.filter(i => !R[i].pushNear).length;
+    out.push({key: 'push:' + k, tab: '+' + typeName(k), title: 'Gepusht: ' + typeName(k), sub: `${exact} met dit type, ${ids.length - exact} die er dichtbij zitten. Eerder getoonde tracks mogen hier terugkomen.`, ids});
+  });
+  SECTIONS.forEach(([key, title, sub]) => { const ids = idx.filter(i => !R[i].pushType && (R[i].section || 'related') === key); if (ids.length) out.push({key, tab: title, title, sub, ids}); });
+  return out;
+}
+function renderPushBar(){
+  $('#pushBar').innerHTML = '<span class="small muted">Meer van één soort:</span>' + TYPES.map(([k, n]) =>
+    `<button class="pushb${pushBusy === k ? ' busy' : ''}" data-push="${k}" title="Zoek breder en haal tot ${PUSH_N} ${esc(n)}-tracks op">${pushBusy === k ? 'Stop ' + esc(n) : '+' + esc(n)}</button>`).join('');
+}
 function renderRecs(){
+  renderPushBar();
   const R = state.lastRecs;
-  if (!R.length){ $('#recList').innerHTML = '<div class="empty">Importeer eerst een paar sets, en klik dan op "Genereer aanbevelingen".</div>'; return; }
-  const idx = R.map((c, i) => i);
-  $('#recList').innerHTML = SECTIONS.map(([key, title, sub]) => {
-    const ids = idx.filter(i => (R[i].section || 'related') === key);
-    if (!ids.length) return '';
-    return `<details class="card sect" open><summary><span class="st">${title}</span> <span class="muted small">${ids.length} tracks · ${new Set(ids.map(i => norm((R[i].artists[0] || {}).name))).size} artiesten</span><div class="small muted">${sub}</div></summary>
-      ${ids.map(i => recHTML(R[i], i, 'recs')).join('')}</details>`;
-  }).join('');
+  if (!R.length){ $('#viewTabs').innerHTML = ''; $('#recList').innerHTML = '<div class="empty">Nog geen aanbevelingen. Klik op "Genereer aanbevelingen", of push hierboven één soort.</div>'; return; }
+  const groups = recGroups();
+  if (recView !== 'all' && !groups.some(g => g.key === recView)) recView = 'all';
+  $('#viewTabs').innerHTML = [{key: 'all', tab: 'Alles', ids: R}].concat(groups).map(g => `<button class="vtab${recView === g.key ? ' on' : ''}" data-view="${esc(g.key)}">${esc(g.tab)} <span class="muted small">${g.ids.length}</span></button>`).join('');
+  $('#recList').innerHTML = groups.filter(g => recView === 'all' || recView === g.key).map(g =>
+    `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">${esc(g.title)}</span> <span class="muted small">${g.ids.length} tracks · ${new Set(g.ids.map(i => norm((R[i].artists[0] || {}).name))).size} artiesten</span><div class="small muted">${esc(g.sub)}</div></summary>
+      ${COLHEAD}${g.ids.map(i => recHTML(R[i], i, 'recs')).join('')}</details>`).join('');
   fillAvailability($('#recList'), state.lastRecs);
   queueEnergy(state.lastRecs);
+  applyDigitalFilter();
+}
+$('#viewTabs').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b){ recView = b.dataset.view; renderRecs(); } });
+
+/* --- push one type: search wider, listen until there are enough --- */
+const PUSH_N = 50;
+// 2 = has this type, 1 = close to it, 0 = no. A type without example tracks can't be learned from your examples,
+// so for those the sound rules decide (how much bass, highs, echo, rhythm) instead of it never matching at all.
+function pushClass(c, k){
+  const key = enKey(c), t = state.types[key], e = state.energy[key];
+  if (t && (t.tags || []).includes(k)) return 2;
+  if (t && t.manual) return 0;
+  if (t && t.scores && t.scores[k] != null && t.scores[k] > 0){
+    const order = Object.entries(t.scores).sort((a, b) => b[1] - a[1]).map(([x]) => x), r = order.indexOf(k);
+    return r === 1 || r === 2 ? 1 : 0;
+  }
+  const s = pushRule(c, k);
+  return s >= 0.6 ? 2 : s >= 0.45 ? 1 : 0;
+}
+function pushRule(c, k){
+  const e = state.energy[enKey(c)]; if (!e || !e.ft) return 0;
+  const f = e.ft;
+  return typesFrom({lowShare: f.lo, highShare: f.hi, onsetRate: f.on, db: f.db, periodicity: f.per, sparsity: f.sp, fourFloor: f.ff, echo: f.ec, change: f.ch}, c.styles).scores[k] || 0;
+}
+$('#pushBar').addEventListener('click', e => { const b = e.target.closest('[data-push]'); if (!b) return; if (pushBusy === b.dataset.push) pushBusy = null; else if (!pushBusy) pushType(b.dataset.push); else toast('Wacht even, er wordt al een soort gepusht'); renderPushBar(); });
+async function pushType(k){
+  pushBusy = k; renderPushBar();
+  const stopped = () => pushBusy !== k;
+  const prog = makeProg('#genProg', '#genMsg'), name = typeName(k);
+  try {
+    const lo = +$('#enMin').value, hi = +$('#enMax').value, T = {types: [k], lo, hi};
+    const P = prepProfile(buildProfile(T));
+    if (!P.n) throw new Error('Nog geen gevonden tracks in je sets.');
+    const topArtists = topN(P.artists, 25).map(([x]) => x);
+    prog(0.03, `+${name}: je netwerk opzoeken…`);
+    await ensureDz(P, topArtists);
+    await expandRelated(P, topArtists, 25);
+    await expandRelated2(P, 30, 15, f => prog(0.03 + 0.07 * f, `+${name}: verwante artiesten zoeken…`));
+    const boost = await addBoostSeeds(P);
+    if (stopped()) return;
+    // wider than a normal round: more labels and artists, more tracks per artist, and earlier shown tracks may return
+    const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 15, capArtist: 4, limit: 500, noShown: true};
+    const cands = (await gatherAndRank(P, deezerJobs(P, 25, 15, 150, 10, 25).concat(boost), opts, (f, l) => prog(0.1 + 0.3 * f, `+${name}: ${l}…`))).filter(c => c.score > 0);
+    const exact = [], near = [], rest = [];
+    const fitsE = c => { const e = energyOf(c); return !e || (e >= lo && e <= hi); };
+    const publish = () => {
+      const list = exact.concat(near).slice(0, PUSH_N).map(c => Object.assign(c, {pushType: k, pushNear: !exact.includes(c)}));
+      state.lastRecs = list.concat((state.lastRecs || []).filter(c => c.pushType !== k));
+      recView = 'push:' + k; save(); renderRecs();
+    };
+    for (let i = 0; i < cands.length && exact.length < PUSH_N && !stopped(); i += 24){
+      const batch = cands.slice(i, i + 24);
+      await measureMany(batch, (d, n) => prog(0.4 + 0.6 * Math.min(1, exact.length / PUSH_N), `+${name}: beluisteren, ${exact.length} van ${PUSH_N} gevonden (${Math.min(cands.length, i + d)} van ${cands.length} kandidaten)…`));
+      batch.forEach(c => {
+        if (!fitsE(c)) return;
+        const m = pushClass(c, k);
+        if (m === 2) exact.push(c); else if (m === 1) near.push(c);
+        else { const s = pushRule(c, k); if (s > 0) rest.push({c, s}); }
+      });
+      if (exact.length + near.length) publish();
+    }
+    prog(1, '');
+    // still short of the goal: fill up with what sounds closest, marked as such
+    rest.sort((a, b) => b.s - a.s).slice(0, Math.max(0, PUSH_N - exact.length - near.length)).forEach(o => near.push(o.c));
+    publish();
+    const total = Math.min(PUSH_N, exact.length + near.length), ex = Math.min(total, exact.length);
+    $('#genMsg').textContent = stopped() ? `Gestopt: ${total} tracks voor ${name}.`
+      : total ? `+${name}: ${ex} tracks met dit type${total > ex ? ` en ${total - ex} die er dichtbij zitten` : ''}, uit ${cands.length} kandidaten.`
+      : `Geen ${name}-tracks gevonden in ${cands.length} kandidaten. Check je energiefilter (${lo}–${hi}) of geef een paar voorbeeldtracks van dit type bij Instellingen.`;
+  } catch(err){ $('#genMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; prog(1, ''); }
+  finally { pushBusy = null; renderPushBar(); }
+}
+
+/* --- search a track, get recommendations from it --- */
+let searchT = null, searchN = 0, recRun = 0, searchHits = [];
+const spToHit = x => ({from: 'Spotify', artist: x.artists.map(a => a.name).join(', '), title: x.name, album: (x.album || {}).name || '', thumb: ((x.album || {}).images || []).slice(-1).map(m => m.url)[0] || '', sp: x.uri});
+const dzToHit = x => ({from: 'Deezer', artist: (x.artist || {}).name || '', title: x.title, album: (x.album || {}).title || '', thumb: (x.album || {}).cover_small || '', dzTrackId: x.id, preview: x.preview, raw: x});
+async function runSearch(q){
+  const n = ++searchN, box = $('#searchRes');
+  box.hidden = false; box.innerHTML = '<div class="small muted" style="padding:8px">Zoeken…</div>';
+  const [sp, dzr] = await Promise.all([
+    spConnected() ? spWeb('/search?type=track&limit=8&q=' + encodeURIComponent(q)).then(d => ((d.tracks || {}).items || []).map(spToHit)).catch(() => []) : [],
+    dz('/search', {q, limit: 8}, 36e5).then(d => ((d || {}).data || []).map(dzToHit)).catch(() => []),
+  ]);
+  if (n !== searchN) return;
+  const seen = new Set();
+  searchHits = sp.concat(dzr).filter(h => { const k = norm(h.artist) + '|' + titleCore(cleanTitle(h.title)); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 12);
+  box.innerHTML = searchHits.length ? searchHits.map((h, i) => `<div class="sr">
+      <button class="play" data-srp="${i}" aria-label="Speel ${esc(h.title)}">▶</button>
+      ${h.thumb ? `<img src="${esc(h.thumb)}" alt="">` : '<div class="ph"></div>'}
+      <div class="n"><b>${esc(h.title)}</b><span>${esc(h.artist)}${h.album ? ' · ' + esc(h.album) : ''}</span></div>
+      <span class="small muted">${h.from}</span>
+      <button class="btn small primary" data-srr="${i}">Aanbevelingen</button>
+    </div>`).join('') : '<div class="small muted" style="padding:8px">Niets gevonden.</div>';
+}
+$('#searchQ').addEventListener('input', e => { clearTimeout(searchT); const q = e.target.value.trim(); if (q.length < 2){ searchN++; $('#searchRes').hidden = true; return; } searchT = setTimeout(() => runSearch(q), 300); });
+$('#searchQ').addEventListener('focus', () => { if ($('#searchRes').innerHTML && $('#searchQ').value.trim().length >= 2) $('#searchRes').hidden = false; });
+$('#searchQ').addEventListener('keydown', e => { if (e.key === 'Escape') $('#searchRes').hidden = true; if (e.key === 'Enter' && searchHits[0]){ e.preventDefault(); recsFromHit(searchHits[0]); } });
+document.addEventListener('click', e => { if (!e.target.closest('#searchWrap')) $('#searchRes').hidden = true; });
+$('#searchRes').addEventListener('click', e => {
+  const p = e.target.closest('[data-srp]'), r = e.target.closest('[data-srr]');
+  if (p){ const h = searchHits[+p.dataset.srp]; playQueue([{artist: h.artist, title: h.title, preview: h.preview, dzTrackId: h.dzTrackId}], 0); }
+  if (r) recsFromHit(searchHits[+r.dataset.srr]);
+});
+// recommendations run on the Deezer network, so a Spotify hit is first looked up there
+async function hitToItem(h){
+  if (h.raw) return fromDz(h.raw);
+  try {
+    const pv = await findPreview(h.artist, h.title), m = (pv.deezer || '').match(/track\/(\d+)/);
+    if (m){ const tr = await dz('/track/' + m[1]); if (tr && tr.id) return fromDz(tr); }
+  } catch(e){}
+  return {source: 'deezer', releaseId: 'q' + norm(h.artist + h.title), dzTrackId: null, masterId: null, title: h.title, releaseTitle: h.album, artists: splitArtists(h.artist).map(name => ({name})), labels: [], styles: [], genres: [], year: null, thumb: h.thumb, rank: 0, preview: '', uri: 'https://www.deezer.com/search/' + encodeURIComponent(h.artist + ' ' + h.title)};
+}
+async function recsFromHit(h){
+  $('#searchRes').hidden = true;
+  showTab('recs');
+  searchN++;
+  const box = $('#searchRecs'), run = ++recRun;
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Lijkt op: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a><div class="small muted" id="srMsg">Zoeken…</div></summary><div class="progress" id="srProg"><div></div></div><div id="srList"></div></details>`;
+  $('#srClose').onclick = ev => { ev.preventDefault(); recRun++; box.innerHTML = ''; };
+  scrollTo({top: 0, behavior: 'smooth'});
+  try {
+    const item = await hitToItem(h);
+    const list = await similarTo(item, (f, t) => { if (run !== recRun) return; const b = $('#srProg'), m = $('#srMsg'); if (b) b.firstElementChild.style.width = Math.round(f * 100) + '%'; if (m) m.textContent = t || ''; });
+    if (run !== recRun) return;
+    searchList = list; markSimShown(list.slice(0, 10));
+    $('#srProg').hidden = true;
+    $('#srMsg').textContent = list.length ? `${list.length} tracks in dezelfde hoek, op netwerk en klank.` : 'Niets gevonden. Deze artiest heeft op Deezer weinig verwante artiesten.';
+    $('#srList').innerHTML = list.length ? COLHEAD + list.map((x, i) => recHTML(x, i, 'search')).join('') : '';
+    fillAvailability($('#srList'), list); queueEnergy(list); applyDigitalFilter();
+  } catch(err){ if ($('#srMsg')) $('#srMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
 }
 
 /* --- sets --- */
@@ -2563,7 +2861,7 @@ function plSugHTML(pl){
   if (sg.err) return `<div class="small bad">${esc(sg.err)}</div>`;
   const key = 'plsug' + pl.id; inlineLists[key] = sg.list;
   return `<div class="isim"><div class="small muted" style="margin:6px 0 2px">Past bij deze playlist (${sg.list.length}): <a href="#" data-pla="sugclose">verberg</a></div>`
-    + (sg.list.map((x, i) => recHTML(x, i, key).replace('<button class="btn small" data-act="addpl">+ Playlist</button>', `<button class="btn primary small" data-pla="addsug" data-si="${i}">+ In deze playlist</button><button class="btn small" data-act="addpl">+ Andere playlist</button>`)).join('') || '<div class="small muted">Niets gevonden dat goed genoeg past.</div>') + '</div>';
+    + (sg.list.map((x, i) => recHTML(x, i, key).replace('class="det" hidden', 'class="det"').replace('<button class="btn small" data-act="addpl">+ Playlist</button>', `<button class="btn primary small" data-pla="addsug" data-si="${i}">+ In deze playlist</button><button class="btn small" data-act="addpl">+ Andere playlist</button>`)).join('') || '<div class="small muted">Niets gevonden dat goed genoeg past.</div>') + '</div>';
 }
 function renderPlaylists(){
   $('#plList').innerHTML = state.playlists.map((pl, pi) => {
