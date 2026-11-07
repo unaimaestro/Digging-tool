@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="32">
+<meta name="dt-version" content="33">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -286,6 +286,35 @@ body{background:var(--bg)}
     <h2>Updates</h2>
     <p class="small muted">De app haalt nieuwe versies zelf op en installeert ze, je data blijft staan. Een gedownloade <b>digging.html</b> in je Downloads-map neemt hij ook vanzelf over. Lukt dat niet, kies het bestand dan hier (of sleep het op dit venster). Je gegevens blijven gewoon staan.</p>
     <div class="row"><label class="btn primary">Installeer update<input type="file" id="upFile" accept=".html,text/html" hidden></label><span class="small" id="upMsg"></span></div>
+  </div>
+  <div class="card" id="rbCard">
+    <h2>Naar Rekordbox</h2>
+    <p class="small muted">Energie 1-5 wordt de rating, de types komen in Comments als <b>[DT minimal, deep]</b> (je eigen tekst blijft staan) en je playlists komen in een map <b>Digging Tool</b>. Cuepoints, beatgrid en bestandspaden blijven zoals ze in je export staan. Alleen tracks die lokaal in je Rekordbox-collectie staan kunnen mee. Rekordbox XML kent geen My Tags, daarom staan de types in Comments.</p>
+    <p class="small muted"><b>Stap 1.</b> In Rekordbox: File &gt; Export Collection in xml format. Doe dit elke keer opnieuw, zodat je geen oude cuepoints terugzet.</p>
+    <div class="row">
+      <label class="btn primary">Rekordbox-XML laden<input type="file" id="rbFile" accept=".xml" hidden></label>
+      <span class="small muted" id="rbMsg"></span>
+    </div>
+    <div id="rbOut" hidden style="margin-top:12px">
+      <div id="rbPls" class="small" style="margin-bottom:8px"></div>
+      <label class="small" style="display:block"><input type="checkbox" id="rbAll" checked style="width:auto;display:inline;margin:0 6px 0 0;vertical-align:middle"> Ook alle andere tracks die de tool kent (rating en types, zonder playlist)</label>
+      <label class="small" style="display:block;margin-bottom:8px"><input type="checkbox" id="rbKeep" checked style="width:auto;display:inline;margin:0 6px 0 0;vertical-align:middle"> Ratings die al in Rekordbox staan behouden</label>
+      <div id="rbSum" class="small" style="margin-bottom:8px"></div>
+      <div class="row"><button class="btn primary" id="rbDl">Download XML voor Rekordbox</button></div>
+      <details class="small" style="margin-top:10px" open>
+        <summary>Stap 2: importeren in Rekordbox</summary>
+        <ol>
+          <li>Maak eerst een back-up: File &gt; Library &gt; Backup Library.</li>
+          <li>Preferences &gt; Advanced &gt; Database, bij Imported Library: klik Browse en kies het gedownloade bestand. Sluit Preferences.</li>
+          <li>Klik in het smalle rijtje icoontjes links op het xml-icoon (staat het er niet: Preferences &gt; View &gt; Layout &gt; rekordbox xml aanvinken).</li>
+          <li>Rechtsklik op de map Digging Tool en kies Import Playlist. De playlists staan nu onderaan je gewone Playlists, de sterren nog niet.</li>
+          <li>Klik onder rekordbox xml op All Tracks, klik op een track, druk Cmd + A, rechtsklik en kies Import To Collection. Pas nu komen de sterren en Comments binnen. Vraagt Rekordbox om te overschrijven, kies dan Ja.</li>
+        </ol>
+      </details>
+      <details class="small" style="margin-top:6px" id="rbAssumedWrap"><summary id="rbAssumedHead"></summary><div id="rbAssumed" class="muted"></div></details>
+      <details class="small" style="margin-top:6px" id="rbMissWrap"><summary id="rbMissHead"></summary><div id="rbMiss" class="muted"></div></details>
+      <details class="small" style="margin-top:6px" id="rbDoubtWrap"><summary id="rbDoubtHead"></summary><div id="rbDoubt" class="muted"></div></details>
+    </div>
   </div>
   <div class="card">
     <h2>Back-up</h2>
@@ -3162,6 +3191,161 @@ document.addEventListener('drop', e => {
 });
 $('#ytKey').value = state.ytKey || '';
 $('#saveYt').onclick = () => { state.ytKey = $('#ytKey').value.trim(); save(); $('#ytMsg').innerHTML = '<span class="ok">Opgeslagen</span>'; };
+/* --- Rekordbox export: energy becomes Rating, types go in Comments, playlists in a folder --- */
+// Format per the official rekordbox "XML file format for playlists sharing" list. It has no My Tag field.
+const RB_NOISE = new Set(['original', 'mix', 'extended', 'version', 'edit', 'radio', 'remaster', 'remastered', 'album', 'digital']);
+const rbNoFeat = s => (s || '').replace(/[(\[]\s*(feat|ft)\.?\s[^)\]]*[)\]]/gi, ' ').replace(/\s+-\s+original\s*$/i, '');
+const rbCore = title => titleCore(cleanTitle(rbNoFeat(title)));
+// What sets a version apart: "Void (Pole Rework)" gives "pole rework", "Void (Original Mix)" gives ""
+function rbVersion(title, mix){
+  const core = new Set(rbCore(title).split(' '));
+  return [...new Set(norm(rbNoFeat(title) + ' ' + (mix || '')).split(' '))]
+    .filter(w => w && !core.has(w) && !RB_NOISE.has(w) && !/^\d+$/.test(w)).sort().join(' ');
+}
+function rbArtists(s){
+  const parts = (s || '').split(/\s*(?:,|;|&|\/|\bfeat\.?\s|\bft\.?\s|\bvs\.?\s|\bx\s|\band\s)\s*/i);
+  return [...new Set([s, ...parts].map(norm).filter(Boolean))];
+}
+function rbParse(text){
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  const col = doc.querySelector('DJ_PLAYLISTS > COLLECTION');
+  if (doc.querySelector('parsererror') || !col) throw new Error('Dit is geen Rekordbox-collectie (XML).');
+  const tracks = [...col.children].filter(n => n.nodeName === 'TRACK' && /^file:/.test(n.getAttribute('Location') || '')).map(el => {
+    let artist = el.getAttribute('Artist') || '', name = el.getAttribute('Name') || '';
+    const split = !artist && name.split(/\s+-\s+/);       // tracks without tags: "Artist - Title" in the name
+    if (split && split.length > 1){ artist = split[0]; name = split.slice(1).join(' - '); }
+    return {el, id: el.getAttribute('TrackID'), artist, name, arts: rbArtists(artist), core: rbCore(name),
+      vers: rbVersion(name, el.getAttribute('Mix')), rating: +el.getAttribute('Rating') || 0, size: +el.getAttribute('Size') || 0};
+  });
+  const byKey = new Map();
+  tracks.forEach(t => t.arts.forEach(a => { const k = a + '|' + t.core; byKey.has(k) ? byKey.get(k).push(t) : byKey.set(k, [t]); }));
+  return {tracks, byKey};
+}
+// Which versions of each song the tool has actually seen
+function rbKnownVersions(){
+  const known = new Map();
+  const add = c => { if (!c || !c.title || !c.artists || !c.artists[0]) return; const k = enKey(c); (known.get(k) || known.set(k, new Set()).get(k)).add(rbVersion(c.title)); };
+  (state.playlists || []).forEach(pl => (pl.tracks || []).forEach(add));
+  (state.likes || []).forEach(add); (state.lastRecs || []).forEach(add);
+  (state.sets || []).forEach(s => (s.tracks || []).forEach(t => add(t.item)));
+  return known;
+}
+function rbMatch(col, plIds, sweep){
+  const assign = new Map();     // Rekordbox track -> tool key (state.energy / state.types)
+  const missing = [], doubt = [], pls = [], flagged = new Set(), assumed = new Map();
+  (state.playlists || []).filter(pl => plIds.has(pl.id)).forEach(pl => {
+    const ids = [];
+    (pl.tracks || []).forEach(t => {
+      const names = t.artists && t.artists.length ? t.artists.map(a => a.name) : [t.artist];
+      const core = rbCore(t.title), vers = rbVersion(t.title);
+      const hits = [...new Set(names.flatMap(rbArtists).flatMap(a => col.byKey.get(a + '|' + core) || []))];
+      const same = hits.filter(h => h.vers === vers);
+      // Downloaded files often lack the version name in their tags: "Void" for "Void (Pole Rework)"
+      const bare = same.length ? [] : hits.filter(h => !h.vers);
+      const use = same.length ? same : bare;
+      const label = (t.artist || names.join(', ')) + ' - ' + t.title;
+      if (use.length){
+        // Several copies of a track: all get the rating, the playlist gets the largest file (best quality)
+        ids.push(use.reduce((a, b) => b.size > a.size ? b : a).id);
+        use.forEach(h => assign.set(h, enKey(t.artists && t.artists.length ? t : {artists: [{name: names[0]}], title: t.title})));
+        bare.forEach(h => assumed.set(h, {label, why: 'in Rekordbox: ' + h.name}));
+      } else if (hits.length){
+        hits.forEach(h => flagged.add(h));
+        doubt.push({label, why: 'in ' + pl.name + ', Rekordbox heeft: ' + hits.map(h => h.name).join(' / ')});
+      } else missing.push({label, pl: pl.name});
+    });
+    if (ids.length) pls.push({name: pl.name, ids});
+  });
+  if (sweep){
+    const groups = new Map();
+    col.tracks.forEach(t => {
+      if (assign.has(t)) return;
+      const a = t.arts.find(x => state.energy[x + '|' + t.core] || state.types[x + '|' + t.core]);
+      if (!a) return;
+      const k = a + '|' + t.core;
+      groups.has(k) ? groups.get(k).push(t) : groups.set(k, [t]);
+    });
+    const known = rbKnownVersions();
+    groups.forEach((list, k) => {
+      // One measurement per song in the tool: only pass it on when it's clear which version was measured
+      const kv = known.get(k), exact = kv ? list.filter(t => kv.has(t.vers)) : list;
+      const bare = kv && !exact.length ? list.filter(t => !t.vers) : [];
+      const fits = exact.length ? exact : bare;
+      if (fits.length && (kv || new Set(list.map(t => t.vers)).size === 1)) fits.forEach(t => assign.set(t, k));
+      bare.forEach(t => assumed.set(t, {label: t.artist + ' - ' + t.name, why: 'de tool kent: ' + [...kv].join(' / ')}));
+      const rest = kv ? list.filter(t => !fits.includes(t)) : (new Set(list.map(t => t.vers)).size > 1 ? list : []);
+      const open = rest.filter(t => !flagged.has(t));
+      if (open.length) doubt.push({label: open[0].artist + ' - ' + open.map(t => t.name).join(' / '), why: kv ? 'de tool kent een andere versie' : 'meerdere versies, onduidelijk welke'});
+    });
+  }
+  return {assign, missing, doubt, pls, assumed: [...assumed.values()]};
+}
+function rbApply(el, key, keepRating){
+  const out = el.cloneNode(true), e = state.energy[key], t = state.types[key];
+  const res = {rated: false, changed: false, kept: false, typed: false};
+  const old = +el.getAttribute('Rating') || 0;
+  if (e && e.e >= 1 && e.e <= 5){
+    const v = Math.round(e.e) * 51;
+    if (keepRating && old) res.kept = old !== v;
+    else { out.setAttribute('Rating', String(v)); res.rated = true; res.changed = old > 0 && old !== v; }
+  }
+  if (t && t.tags && t.tags.length){
+    const base = (el.getAttribute('Comments') || '').replace(/\s*\[DT [^\]]*\]/g, '').trim();
+    out.setAttribute('Comments', (base ? base + ' ' : '') + '[DT ' + t.tags.join(', ') + ']'); res.typed = true;
+  }
+  return {out, res};
+}
+function rbBuild(m, keepRating){
+  const ser = new XMLSerializer(), rows = [];
+  const stats = {tracks: 0, rated: 0, changed: 0, kept: 0, typed: 0};
+  m.assign.forEach((key, t) => {
+    const {out, res} = rbApply(t.el, key, keepRating);
+    rows.push(ser.serializeToString(out)); stats.tracks++;
+    if (res.rated) stats.rated++; if (res.changed) stats.changed++; if (res.kept) stats.kept++; if (res.typed) stats.typed++;
+  });
+  const nodes = m.pls.map(p => `<NODE Name="${esc(p.name)}" Type="1" KeyType="0" Entries="${p.ids.length}">${p.ids.map(id => `<TRACK Key="${esc(id)}"/>`).join('')}</NODE>`);
+  const folder = nodes.length ? `<NODE Type="0" Name="Digging Tool" Count="${nodes.length}">${nodes.join('\n')}</NODE>` : '';
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<DJ_PLAYLISTS Version="1.0.0">\n<PRODUCT Name="Digging Tool" Version="${APP_VERSION}" Company=""/>\n`
+    + `<COLLECTION Entries="${rows.length}">\n${rows.join('\n')}\n</COLLECTION>\n`
+    + `<PLAYLISTS><NODE Type="0" Name="ROOT" Count="${nodes.length ? 1 : 0}">${folder}</NODE></PLAYLISTS>\n</DJ_PLAYLISTS>\n`;
+  return {xml, stats};
+}
+let rbCol = null, rbXml = '';
+function rbRender(){
+  if (!rbCol) return;
+  const ids = new Set([...document.querySelectorAll('#rbPls input:checked')].map(i => +i.value));
+  const m = rbMatch(rbCol, ids, $('#rbAll').checked), b = rbBuild(m, $('#rbKeep').checked), s = b.stats;
+  rbXml = b.xml;
+  $('#rbSum').innerHTML = `<b>${s.tracks}</b> tracks gaan mee: ${s.rated} met rating, ${s.typed} met types, ${m.pls.length} playlist${m.pls.length === 1 ? '' : 's'}.`
+    + (s.changed ? ` <span class="warn">${s.changed} bestaande rating${s.changed === 1 ? '' : 's'} in Rekordbox ${s.changed === 1 ? 'wordt' : 'worden'} overschreven.</span>` : '')
+    + (s.kept ? ` ${s.kept} bestaande rating${s.kept === 1 ? '' : 's'} ${s.kept === 1 ? 'wijkt' : 'wijken'} af van de energie en ${s.kept === 1 ? 'blijft' : 'blijven'} staan.` : '');
+  $('#rbDl').disabled = !s.tracks;
+  $('#rbAssumedHead').textContent = `Versienaam ontbreekt in Rekordbox, aangenomen dat het dezelfde track is (${m.assumed.length})`;
+  $('#rbAssumed').innerHTML = m.assumed.map(x => `<div>${esc(x.label)} <i>(${esc(x.why)})</i></div>`).join('');
+  $('#rbAssumedWrap').hidden = !m.assumed.length;
+  $('#rbMissHead').textContent = `Niet lokaal aanwezig (${m.missing.length})`;
+  $('#rbMiss').innerHTML = m.missing.map(x => `<div>${esc(x.label)} <i>(${esc(x.pl)})</i></div>`).join('');
+  $('#rbMissWrap').hidden = !m.missing.length;
+  $('#rbDoubtHead').textContent = `Twijfel, niet meegenomen (${m.doubt.length})`;
+  $('#rbDoubt').innerHTML = m.doubt.map(x => `<div>${esc(x.label)} <i>(${esc(x.why)})</i></div>`).join('');
+  $('#rbDoubtWrap').hidden = !m.doubt.length;
+}
+$('#rbFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    rbCol = rbParse(await f.text());
+    $('#rbMsg').textContent = rbCol.tracks.length + ' lokale tracks gelezen uit ' + f.name;
+    $('#rbPls').innerHTML = (state.playlists || []).map(pl => `<label style="display:inline-block;margin-right:12px"><input type="checkbox" value="${pl.id}" checked style="width:auto;display:inline;margin:0 6px 0 0;vertical-align:middle"> ${esc(pl.name)} (${(pl.tracks || []).length})</label>`).join('');
+    $('#rbOut').hidden = false; rbRender();
+  } catch(err){ rbCol = null; $('#rbOut').hidden = true; $('#rbMsg').textContent = err.message; }
+  e.target.value = '';
+};
+$('#rbPls').onchange = $('#rbAll').onchange = $('#rbKeep').onchange = rbRender;
+$('#rbDl').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rbXml], {type: 'application/xml'}));
+  a.download = 'digging-rekordbox-' + new Date().toISOString().slice(0, 10) + '.xml'; a.click();
+};
+
 $('#exportBtn').onclick = () => {
   const {token, ytKey, ...data} = state;
   const blob = new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'});
