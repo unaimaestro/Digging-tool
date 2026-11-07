@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="26">
+<meta name="dt-version" content="27">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -587,6 +587,7 @@ function buildProfile(T){
   };
   state.sets.forEach(set => set.tracks.forEach(t => { if (t.item){ add(t.item, tw(t.item)); markSeen(P, t.item); } }));
   state.likes.forEach(l => { add(l, 1.5); markSeen(P, l); });
+  plTracksAll().forEach(t => { add(t, 1.2); markSeen(P, t); });
   state.skips.forEach(s => markSeen(P, s));
   P.skipArtists = new Set(state.skips.flatMap(s => (s.artists || []).map(a => norm(a.name))));
   P.banArtists = new Set((state.bans || []).flatMap(b => (b.artists || []).map(a => norm(a.name))));
@@ -846,7 +847,7 @@ async function generateRecs(){
   const prog = makeProg('#genProg', '#genMsg');
   {
     // listen to your set tracks first (only once, it's remembered), so we know your sound
-    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes);
+    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
     const todo = seeds.filter(c => { const h = state.energy[enKey(c)], t = state.types[enKey(c)]; return !h || !t || (!h.ft && !h.partial && !(t.tried && Date.now() - t.tried < 7 * 864e5)); }).slice(0, 150);
     if (todo.length) await measureMany(todo, (d, n) => prog(0.1 * d / n, `Je sets beluisteren om je sound te leren ${d}/${n} (alleen de eerste keer)…`));
   }
@@ -2067,7 +2068,7 @@ const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.leng
 const bpmOf = c => { const e = state.energy[enKey(c)]; if (!e) return 0; if (e.bpm) return e.bpm; const m = /(\d+) BPM/.exec(e.why || ''); return m ? +m[1] : 0; };
 const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff'];
 function soundProfile(){
-  const items = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes);
+  const items = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
   const bpms = [], fts = [], types = {};
   let nt = 0;
   items.forEach(c => {
@@ -2320,6 +2321,7 @@ $('#setList').addEventListener('keydown', async e => {
 
 /* --- playlists --- */
 function toast(t){ const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
+function plTracksAll(){ return (state.playlists || []).flatMap(pl => pl.tracks || []).filter(t => t.artists && t.artists.length); }
 const plTrack = c => ({artist: c.artists.map(a => a.name).join(', '), title: c.title || c.releaseTitle, releaseTitle: c.releaseTitle, labels: c.labels || [],
   artists: c.artists, source: c.source, dzTrackId: c.dzTrackId, dzAlbumId: c.dzAlbumId, releaseId: c.releaseId, preview: c.preview, uri: c.uri, thumb: c.thumb, year: c.year});
 let plPending = null;
@@ -2443,12 +2445,31 @@ function bars(entries, label){
   return `<div class="card"><h3 style="margin-top:0">${label}</h3><div class="bars">${entries.map(([k, v]) =>
     `<div><span>${esc(k)}</span><span class="b"><i style="width:${Math.round(100 * v / max)}%"></i></span><span class="muted small">${fmtW(v)}</span></div>`).join('') || '<span class="muted">Nog niets.</span>'}</div></div>`;
 }
+function learnStats(){
+  const setN = state.sets.reduce((a, s) => a + s.tracks.filter(t => t.item).length, 0);
+  const types = Object.values(state.types).filter(t => t.manual).length;
+  const energy = Object.values(state.energy).filter(e => e.manual).length;
+  const T = trainingSet();
+  return [
+    ['Set-tracks', setN, 'bepalen je artiesten, labels en je sound (BPM en klank)'],
+    ['Likes', state.likes.length, 'tellen 1,5× zo zwaar als een set-track'],
+    ['Tracks in playlists', plTracksAll().length, 'tellen 1,2× mee, net als likes'],
+    ['Zelf getagde types', types, 'zijn voorbeelden waar de app de types van leert'],
+    ['Voorbeeldtracks', (state.examples || []).length, 'je lijsten per type'],
+    ['Zelf aangepaste energie', energy, 'gebruikt bij je energiefilter en doel'],
+    ['Skips', state.skips.length, 'die track komt niet terug, de artiest zakt'],
+    ['Niet mijn sound', (state.bans || []).length, 'track en artiest komen niet terug, vergelijkbare klank zakt'],
+  ].map(([n, v, w]) => `<tr><td>${n}</td><td style="text-align:right;padding:0 12px"><b>${v}</b></td><td class="muted">${w}</td></tr>`).join('')
+   + `<tr><td colspan="3" class="muted" style="padding-top:6px">Types worden geleerd van ${T.rows.length} voorbeelden: ${TYPES.map(([k, n]) => `${n} ${T.per[k] || 0}`).join(' · ')}</td></tr>`;
+}
 function renderProfile(){
   const P = buildProfile();
   const nice = (obj, ids) => topN(obj, 20).map(([k, v]) => [(ids[k] && ids[k].name) || k, v]);
   const yrs = P.years.slice().sort((a, b) => a - b);
   const med = yrs.length ? yrs[Math.floor(yrs.length / 2)] : null;
-  $('#profileView').innerHTML = `<p class="muted">Gebaseerd op ${P.n} tracks en likes${med ? `, mediaan jaar ${med} (${yrs[0]}–${yrs[yrs.length - 1]})` : ''}.</p>
+  $('#profileView').innerHTML = `<div class="card"><h2>Wat de app van je leert</h2><table class="small">${learnStats()}</table>
+    <p class="small muted" style="margin:8px 0 0">Alles hierboven telt mee bij de volgende keer dat je op "Genereer aanbevelingen" drukt. Types die je aanpast worden binnen een paar seconden doorgerekend voor alle tracks.</p></div>
+  <p class="muted">Gebaseerd op ${P.n} tracks, likes en playlist-tracks${med ? `, mediaan jaar ${med} (${yrs[0]}–${yrs[yrs.length - 1]})` : ''}.</p>
     ${energyProfile()}
     ${typeProfile()}
     <div class="grid3">${bars(nice(P.labels, P.labelIds), 'Labels')}${bars(nice(P.artists, P.artistIds), 'Artiesten')}${bars(topN(P.styles, 20), 'Stijlen')}</div>`;
