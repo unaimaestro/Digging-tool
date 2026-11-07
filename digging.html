@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="25">
+<meta name="dt-version" content="26">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -674,9 +674,11 @@ function scoreCand(c, P, opts){
   const pop = c.source === 'deezer' ? Math.log10(1 + (c.rank || 0)) / 6 : Math.log10(1 + (c.want || 0)) / 4; // 0..~1
   // how big is the artist (Deezer fans) and the track (Deezer rank)
   const fans = Math.max(0, ...c.artists.map(a => { const r = P.related && P.related[norm(a.name)]; return (r && r.fans) || 0; }));
-  const big = fans > 150000 ? 0.3 : fans > 60000 ? 0.5 : fans > 20000 ? 0.75 : fans > 0 && fans < 5000 ? 1.15 : 1;
+  // compared with the artists in your own sets: much bigger than what you play = not a hidden gem
+  const ref = P.fanRef || 8000, ratio = fans / ref;
+  const big = !fans ? 1 : ratio > 8 ? 0.2 : ratio > 4 ? 0.4 : ratio > 2 ? 0.65 : ratio < 0.5 ? 1.15 : 1;
   const hit = c.rank > 600000 ? 0.55 : c.rank > 400000 ? 0.8 : 1;
-  if (opts.popMode === 'gems'){ score *= big * hit; if (fans > 60000) why.push(['Grote artiest', null]); }
+  if (opts.popMode === 'gems'){ score *= big * hit; if (ratio > 4) why.push(['Grote artiest', null]); }
   else if (opts.popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
   else score *= Math.sqrt(big * hit);
   if (P.banArtists && c.artists.some(a => P.banArtists.has(norm(a.name)))) score = 0;
@@ -764,10 +766,12 @@ function describeTarget(T){
   if (T.lo > 1 || T.hi < 5) parts.push('energie ' + (T.lo === T.hi ? T.lo : T.lo + '–' + T.hi));
   return parts.join(', ') || 'alles';
 }
+const dzFans = {};
 async function dzArtistId(name){
   try {
     const d = await dz('/search/artist', {q: name, limit: 5});
     const hit = (d && d.data || []).find(x => norm(x.name) === norm(name));
+    if (hit && hit.nb_fan != null) dzFans[hit.id] = hit.nb_fan;
     return hit ? hit.id : null;
   } catch(e){ return null; }
 }
@@ -816,7 +820,18 @@ async function expandRelated2(P, n, perArtist = 15, onStep){
   P.maxRel = Math.max(1, ...Object.values(P.related).map(r => r.w));
 }
 const dzTop = (id, limit) => async () => ((await dz('/artist/' + id + '/top', {limit})) || {data: []}).data.map(t => fromDz(t));
-const dzLabel = name => async () => ((await dz('/search', {q: `label:"${name}"`, limit: 100})) || {data: []}).data.map(t => fromDz(t, {label: name}));
+const NON_ELECTRONIC = /pop|k-pop|rap|hip hop|r&b|rock|metal|latin|reggaeton|country|schlager|kids|jazz|soul|film|classical|alternative|singer/i;
+const genreOk = a => { const g = (a.genres && a.genres.data || []).map(x => x.name); return !g.length || g.some(x => /electro|dance|techno|house|ambient/i.test(x)) || !g.some(x => NON_ELECTRONIC.test(x)); };
+const labelSame = (a, b) => { const x = lk(a || ''), y = lk(b || ''); return x && y && (x === y || (Math.min(x.length, y.length) >= 5 && (x.includes(y) || y.includes(x)))); };
+const dzLabel = name => async () => {
+  const data = ((await dz('/search', {q: `label:"${name}"`, limit: 100})) || {data: []}).data;
+  const albums = [...new Set(data.map(t => t.album && t.album.id).filter(Boolean))].slice(0, 12);
+  const ok = new Set();
+  for (const id of albums){
+    try { const a = await dz('/album/' + id); if (a && labelSame(a.label, name) && genreOk(a)) ok.add(id); } catch(e){}
+  }
+  return data.filter(t => t.album && ok.has(t.album.id)).map(t => fromDz(t, {label: name}));
+};
 function deezerJobs(P, nLabels, nArtists, nRelated, perRelated = 10, perKnown = 30){
   const jobs = [];
   topN(P.labels, nLabels).forEach(([k]) => { const name = (P.labelIds[k] || {}).name || k; jobs.push({fn: dzLabel(name), mustLabel: k, label: 'Label ' + name}); });
@@ -844,6 +859,9 @@ async function generateRecs(){
   const topStyles = topN(P.styles, 6).map(([s]) => s).filter(s => !GENERIC_STYLES.has(s)).slice(0, 3);
   prog(0.1, 'Je artiesten opzoeken op Deezer…');
   await ensureDz(P, topArtists);
+  // how big are the artists you play? (Deezer fans; remembered, used as yardstick for "hidden gems")
+  for (const k of topArtists.slice(0, 25)){ const r = P.dzArtists[k]; if (r && dzFans[r.dz] == null){ try { const a = await dz('/artist/' + r.dz); if (a && a.nb_fan != null) dzFans[r.dz] = a.nb_fan; } catch(e){} } }
+  { const f = topArtists.map(k => P.dzArtists[k] && dzFans[P.dzArtists[k].dz]).filter(x => x > 0); if (f.length >= 5){ P.fanRef = Math.max(2000, pct(f, 0.6)); state.fanRef = P.fanRef; } }
   prog(0.06, 'Verwante artiesten zoeken (stap 1)…');
   await expandRelated(P, topArtists, 25);
   prog(0.1, 'Verwante artiesten zoeken (stap 2)…');
@@ -904,7 +922,7 @@ async function similarTo(item, progTarget){
   seed.styles.forEach(s => P.styles[s] = 1);
   // light blend with overall sound so "similar" also fits your taste
   const G = buildProfile();
-  P.banArtists = G.banArtists; P.skipArtists = G.skipArtists;
+  P.banArtists = G.banArtists; P.skipArtists = G.skipArtists; P.fanRef = state.fanRef;
   if (seed.styles.length) Object.entries(G.styles).forEach(([s, w]) => P.styles[s] = (P.styles[s] || 0) + 0.1 * w / Math.max(1, G.n) );
   G.seen.forEach(x => P.seen.add(x));
   markSeen(P, seed);
@@ -2027,9 +2045,15 @@ function fitOf(c, T){
   const e = energyOf(c), ty = typesOf(c);
   let f = 1; const why = [];
   if (T.types.length){
+    const sc = (state.types[enKey(c)] || {}).scores;
     if (!ty) f *= 0.8;
     else if (ty.some(x => T.types.includes(x))){ f *= 1.4; why.push(ty.filter(x => T.types.includes(x)).map(typeName).join('/')); }
-    else f *= 0.35;
+    else if (sc){
+      // how high does the goal type rank for this track?
+      const order = Object.entries(sc).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+      const r = Math.min(...T.types.map(t => { const i = order.indexOf(t); return i < 0 ? 9 : i; }));
+      f *= r === 1 ? 1.1 : r === 2 ? 0.85 : 0.6;
+    } else f *= 0.6;
   }
   if (T.lo > 1 || T.hi < 5){
     if (!e) f *= 0.8;
@@ -2105,7 +2129,7 @@ function applyDigitalFilter(){
     const c = ctxLists[r.dataset.ctx]()[+r.dataset.i];
     const e = c && energyOf(c);
     const tt = (state.target || {}).types || [], ty = c && typesOf(c);
-    const hide = (only && c && c.digital === false) || (e && (e < lo || e > hi)) || (tt.length && ty && ty.length && !ty.some(x => tt.includes(x)));
+    const hide = (only && c && c.digital === false) || (e && (e < lo || e > hi));
     r.style.display = hide ? 'none' : '';
   });
 }
