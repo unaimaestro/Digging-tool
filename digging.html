@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="30">
+<meta name="dt-version" content="31">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -571,6 +571,34 @@ function releaseToItem(rel, p){
 }
 
 /* ================= Profile ================= */
+/* --- extra discovery: small artists and labels around your sound (researched 7 Nov), and names that are too big --- */
+const BOOST = {"artists": [{"name": "Franco Rossi", "c": "A", "why": "Release op Sine Space 7 (label van Isabel Soto en Truxx), gesteund door Setaoc Mass"}, {"name": "Elisa Batti", "c": "A", "why": "Remix op Isabel Soto's *Habitat Alteration* (Sine Space 7)"}, {"name": "Kameliia", "c": "A", "why": "Op AMTK+, het sublabel van Amotik"}, {"name": "Decoder", "c": "A", "why": "AMTK+, split met Kameliia"}, {"name": "D-Leria", "c": "A", "why": "AMTK+005"}, {"name": "Translate", "c": "A", "why": "AMTK+005"}, {"name": "Angioma", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "BLANKA", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "Katnada", "c": "A", "why": "AMTK+006"}, {"name": "Marsch", "c": "A", "why": "AMTK+006, Tresor New Faces"}, {"name": "Decka", "c": "A", "why": "AMTK+002"}, {"name": "Arthur Robert", "c": "A", "why": "AMTK+002"}, {"name": "Tina Ramamurthy", "c": "A", "why": "Gezamenlijke release met Amotik (AMTK 014)"}, {"name": "Kike Pravda", "c": "A", "why": "Semantica (Madrid), dezelfde donkere hypnotische lijn als Mulero"}, {"name": "Geømmetrisch", "c": "A", "why": "Semantica"}, {"name": "Svreca", "c": "A", "why": "Oprichter van Semantica, rauw en hypnotisch zonder grote naam"}, {"name": "Kwartz", "c": "A", "why": "Spaanse hypnotische techno, speelt Amotik"}, {"name": "Sciahri", "c": "A", "why": "Italiaans, diep en hypnotisch, op Mutual Rytm"}, {"name": "Backbone (PT)", "c": "A", "why": "Mutual Rytm"}, {"name": "Pfirter", "c": "A", "why": "Argentijns, MindTrip-label, speelt Amotik"}, {"name": "Exium", "c": "B", "why": "Spaans duo, Nheoma; zelfde school als Mulero en Warm Up"}, {"name": "Reeko", "c": "B", "why": "Spaans, rauw en hypnotisch, Mulero-kring"}, {"name": "Christian Wünsch", "c": "B", "why": "Warm Up / Pole Group, strak en hypnotisch"}, {"name": "Tadeo", "c": "B", "why": "Spaans, diep en ruimtelijk, tool-achtig"}, {"name": "Dino Sabatini", "c": "B", "why": "Italiaans, Outis Music; diep, dubby, tribaal-hypnotisch"}, {"name": "Ness", "c": "B", "why": "Italiaans, hypnotische loops"}, {"name": "Antonio Ruscito", "c": "B", "why": "Italiaans, minimal-hypnotisch"}, {"name": "Mattia Trani", "c": "B", "why": "Italiaans, donker en hypnotisch"}, {"name": "Neel", "c": "B", "why": "Spazio Disponibile, ambient-kant van hypnotic"}, {"name": "Abdulla Rashim", "c": "B", "why": "Dubby, mistige hypnotische techno (Northern Electronics)"}, {"name": "Grad_U", "c": "B", "why": "Russisch, diep en hypnotisch"}, {"name": "Rikhter", "c": "B", "why": "Oekraïens, hypnotische tools (past bij Unit (UA))"}, {"name": "Ryuji Takeuchi", "c": "B", "why": "Japans, hypnotische loop-techno"}, {"name": "Jonas Kopp", "c": "B", "why": "Argentijns, diep en psychedelisch hypnotisch"}, {"name": "Kessell", "c": "B", "why": "Mexicaans, minimalistisch en hypnotisch"}, {"name": "Nørbak", "c": "B", "why": "Deens, diep hypnotisch"}, {"name": "Patrick Siech", "c": "B", "why": "Zweeds, strakke hypnotische grooves"}, {"name": "Temudo", "c": "B", "why": "Portugees, rollend en hypnotisch"}, {"name": "Nur Jaber", "c": "B", "why": "Libanees, diep en hypnotisch, eigen label Out-er"}, {"name": "Antigone", "c": "B", "why": "Frans, breaky en hypnotisch (voor de breaky-kleur)"}], "labels": [{"name": "Sine Space 7", "c": "A", "why": "Isabel Soto, Truxx, Franco Rossi: kern van jouw sound"}, {"name": "AMTK / AMTK+", "c": "A", "why": "Amotik's labels, veel kleine nieuwe namen"}, {"name": "Orbe Records", "c": "A", "why": "Label van ORBE (Fernando Sanz)"}, {"name": "IMMATERIAL Archives", "c": "A", "why": "Giri releaset hier (Schemi, IA024)"}, {"name": "Semantica", "c": "A", "why": "Madrid, rauw en hypnotisch, 200+ releases"}, {"name": "Warm Up / Pole Group", "c": "A", "why": "Oscar Mulero's labels"}, {"name": "Inguma Records", "c": "A", "why": "Isabel Soto (Terra Nova, NGM022)"}, {"name": "Sonov Records (SMV)", "c": "A", "why": "Ignez' minimal-techno EP"}, {"name": "MindTrip", "c": "A", "why": "Pfirter's label, ook Franco Rossi-kring"}, {"name": "Mutual Rytm", "c": "A", "why": "#1 in raw & hypnotic, veel kleine artiesten"}, {"name": "Reclaim Your City", "c": "B", "why": "Hypnotische compilaties, Amotik-kring"}, {"name": "Hypnus", "c": "B", "why": "Zweeds, diep en hypnotisch"}, {"name": "Outis Music", "c": "B", "why": "Dino Sabatini, dub/tribaal-hypnotisch"}, {"name": "Nheoma", "c": "B", "why": "Exium"}, {"name": "Spazio Disponibile", "c": "B", "why": "Ambient-hypnotisch (Neel)"}, {"name": "Vault Records (NL)", "c": "B", "why": "Hypnotische tools"}, {"name": "Prologue", "c": "B", "why": "Diep en hypnotisch (München)"}, {"name": "Echocord / Silent Season", "c": "B", "why": "Voor de dub- en ambient-kleur"}], "tooBig": ["Ben Klock", "Paula Temple", "DJ Nobu", "Luke Slater", "Ben Sims", "DVS1", "Richie Hawtin", "Tommy Four Seven", "Rene Wise", "Chlär", "Rrose", "Dax J", "Kobosil", "Forest Drive West", "Claudio PRC"]};
+const TOO_BIG = new Set(BOOST.tooBig.map(n => norm(n)));
+async function addBoostSeeds(P, onStep){
+  const maxRel = P.maxRel || 1;
+  let i = 0;
+  for (const a of BOOST.artists){
+    const k = norm(a.name);
+    if (!P.artists[k] && !TOO_BIG.has(k)){
+      const id = await dzArtistId(a.name);
+      if (id){
+        const r = P.related[k] || (P.related[k] = {w: 0, of: [], dz: id, name: a.name, hop: 1, fans: dzFans[id]});
+        r.w = Math.max(r.w, maxRel * (a.c === 'A' ? 0.9 : 0.6)); r.boost = a.why; r.hop = 1;
+      }
+    }
+    onStep && onStep(++i / (BOOST.artists.length + BOOST.labels.length));
+  }
+  const maxL = Math.max(1, ...Object.values(P.labels));
+  const jobs = [];
+  BOOST.labels.forEach(l => {
+    const name = l.name.split('/')[0].trim(), k = lk(name);
+    P.labels[k] = Math.max(P.labels[k] || 0, maxL * (l.c === 'A' ? 0.5 : 0.3));
+    P.labelIds[k] = P.labelIds[k] || {name};
+    jobs.push({fn: dzLabel(name), mustLabel: k, label: 'Label ' + name});
+  });
+  P.maxRel = Math.max(1, ...Object.values(P.related).map(r => r.w));
+  return jobs;
+}
 function buildProfile(T){
   const P = {labels:{}, artists:{}, styles:{}, labelIds:{}, artistIds:{}, dzArtists:{}, years:[], seen:new Set(), n:0};
   // with a target, set tracks that fit it count much more; tracks that clearly don't fit count little
@@ -690,6 +718,10 @@ function scoreCand(c, P, opts){
   else if (opts.popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
   else score *= Math.sqrt(big * hit);
   if (P.banArtists && c.artists.some(a => P.banArtists.has(norm(a.name)))) score = 0;
+  if (opts.popMode !== 'classics' && c.artists.some(a => TOO_BIG.has(norm(a.name)))) score = 0;
+  // artists you've already been shown a lot: each earlier round counts
+  if (!opts.noShown){ const sa = Math.max(0, ...c.artists.map(a => (state.shownArtists || {})[norm(a.name)] || 0)); if (sa) score *= Math.pow(0.6, Math.min(sa, 5)); }
+  { const bt = c.artists.map(a => P.related && P.related[norm(a.name)]).find(r => r && r.boost); if (bt) why.unshift(['Tip: ' + bt.boost, null]); }
   // shown in earlier recommendation rounds: make room for new tracks
   const seenN = (state.shown || {})[candKey(c)] || 0;
   if (seenN && !opts.noShown) score *= seenN >= 2 ? 0.15 : 0.35;
@@ -860,8 +892,8 @@ async function generateRecs(){
   }
   const P = prepProfile(buildProfile(steer ? T : null));
   if (!P.n) throw new Error('Nog geen gevonden tracks in je sets.');
-  const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 5, capArtist: 2, limit: 200,
-    sectionLimit: {related: 120, label: 50, known: 20}};
+  const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 4, capArtist: 1, limit: 200,
+    sectionLimit: {related: 120, label: 50, known: 10}};
   const topLabels = topN(P.labels, 15).map(([k]) => k);
   const topArtists = topN(P.artists, 25).map(([k]) => k);
   const topStyles = topN(P.styles, 6).map(([s]) => s).filter(s => !GENERIC_STYLES.has(s)).slice(0, 3);
@@ -875,8 +907,10 @@ async function generateRecs(){
   prog(0.1, 'Verwante artiesten zoeken (stap 2)…');
   await expandRelated2(P, 30, 15, f => prog(0.1 + 0.1 * f, 'Verwante artiesten zoeken (stap 2)…'));
   let i = 0;
+  prog(0.18, 'Kleine artiesten en labels rond je sound toevoegen…');
+  const boostJobs = await addBoostSeeds(P, f => prog(0.18 + 0.02 * f, 'Kleine artiesten en labels rond je sound toevoegen…'));
   const aliasKeys = discogsOk() ? await expandAliases(P, topArtists.slice(0, 6), () => prog(0.1 + ++i / 60, 'Aliassen ophalen (Discogs)…')) : [];
-  const plan = deezerJobs(P, 15, 8, 90, 5, 10);
+  const plan = deezerJobs(P, 15, 8, 90, 5, 10).concat(boostJobs);
   if (discogsOk()){
   topLabels.forEach(k => plan.push({params: {label: (P.labelIds[k] || {}).name || k}, mustLabel: k, label: 'Label ' + ((P.labelIds[k] || {}).name || k)}));
   topArtists.forEach(k => plan.push({params: {artist: (P.artistIds[k] || {}).name || k}, mustArtist: k, label: 'Artiest ' + ((P.artistIds[k] || {}).name || k)}));
@@ -907,6 +941,8 @@ async function generateRecs(){
   dropped += before - recs.length;
   state.shown = state.shown || {};
   recs.forEach(c => { const k = candKey(c); state.shown[k] = (state.shown[k] || 0) + 1; });
+  state.shownArtists = state.shownArtists || {};
+  recs.filter(c => c.section !== 'known').forEach(c => { const k = norm((c.artists[0] || {}).name); if (k) state.shownArtists[k] = (state.shownArtists[k] || 0) + 1; });
   const sk = Object.keys(state.shown); if (sk.length > 4000) sk.slice(0, sk.length - 4000).forEach(k => delete state.shown[k]);
   if (steer) fitInfo = {fits, measured: listen.length};
   const nArt = new Set(recs.filter(c => c.section !== 'known').map(c => norm((c.artists[0] || {}).name))).size;
@@ -2840,7 +2876,7 @@ $('#importFile').onchange = async e => {
   catch(err){ alert('Ongeldig bestand.'); }
 };
 $('#clearCache').onclick = async () => { await idb.clear(); alert('Cache geleegd.'); };
-$('#clearSkips').onclick = () => { if (!confirm('Skips, "Niet mijn sound" en eerder getoonde tracks resetten?')) return; state.skips = []; state.bans = []; state.shown = {}; save(); alert('Gereset.'); };
+$('#clearSkips').onclick = () => { if (!confirm('Skips, "Niet mijn sound" en eerder getoonde tracks resetten?')) return; state.skips = []; state.bans = []; state.shown = {}; state.shownArtists = {}; save(); alert('Gereset.'); };
 
 renderRecs(); refreshStyleFilter();
 
