@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="28">
+<meta name="dt-version" content="29">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <style>
 :root{
@@ -88,6 +88,13 @@ details.sect:not([open])>summary::before{content:'▸ '}
 .steer{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .tchip{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:4px 12px;cursor:pointer;font:inherit;font-size:13px}
 .tchip.on{background:#3d2f66;border-color:#7d64d6;color:#fff}
+.ana{margin:8px 0;padding:12px;background:var(--panel2);border-radius:10px}
+.ana h3{margin:12px 0 6px;font-size:14px}
+.ana .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:4px 0}
+.ana .bar span{display:block;height:100%}
+.ana .arc{display:flex;align-items:flex-end;gap:2px;height:46px;margin:6px 0}
+.ana .arc span{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-width:3px}
+.ana ul{margin:4px 0;padding-left:18px}
 .chip.fit{background:#3b2a12;color:#ffc98a}
 .tl .stores{font-size:11.5px;color:var(--muted)}
 .chip.avail{background:#13303a;color:#8fd8ef}
@@ -2424,7 +2431,96 @@ async function pushToSpotify(pl, btn){
     if (missing.length) alert('Niet gevonden op Spotify:\n\n' + missing.join('\n'));
   } catch(e){ alert(e.message); btn.disabled = false; btn.textContent = 'Zet in Spotify'; }
 }
-const plSug = {};
+const plSug = {}, plAna = {};
+/* --- playlist analysis: repetition, type balance (core: minimal/hypnotic/deep, rest is colour), groove, BPM, energy arc --- */
+const CORE = ['minimal', 'hypnotic', 'deep'], COLOUR = ['tool', 'ambient', 'dub', 'broken'];
+const TYPE_COL = {minimal: '#6fa8dc', hypnotic: '#8e7cc3', deep: '#3d85c6', tool: '#e69138', ambient: '#93c47d', dub: '#76a5af', broken: '#c27ba0'};
+function grooveOf(t){
+  const e = state.energy[enKey(t)]; if (!e || !e.ft) return null;
+  const f = e.ft;
+  return Math.round(100 * (0.35 * lin(f.ff, 0.15, 0.45) + 0.25 * lin(f.per, 0.2, 0.55) + 0.2 * lin(f.on, 2, 6) + 0.2 * lin(f.lo, 0.3, 0.6)));
+}
+// order for a set: warm up, build, peak around 75%, short release at the end; BPM rises smoothly
+function arcOrder(tracks){
+  const info = tracks.map((t, i) => ({t, i, e: energyOf(t) || 3, b: bpmOf(t) || 0}));
+  const sorted = info.slice().sort((a, b) => a.e - b.e || a.b - b.b);
+  const n = sorted.length; if (n < 4) return sorted;
+  const nEnd = Math.max(1, Math.round(n * 0.12)), keepTop = Math.max(1, Math.round(n * 0.1));
+  // the release: a few tracks from just under the top go after the peak, stepping down
+  const release = sorted.slice(0, n - keepTop).slice(-nEnd);
+  const rest = sorted.filter(x => !release.includes(x));
+  return rest.concat(release.slice().sort((a, b) => b.e - a.e || b.b - a.b));
+}
+function analysePlaylist(pl){
+  const T = pl.tracks, n = T.length;
+  if (!n) return '<div class="ana small muted">Nog geen tracks om te analyseren.</div>';
+  const out = [], tips = [];
+  // artists and labels
+  const cnt = {}, lab = {};
+  T.forEach(t => { (t.artists && t.artists.length ? t.artists.map(a => a.name) : (t.artist || '').split(',')).map(x => x.trim()).filter(Boolean).forEach(a => cnt[a] = (cnt[a] || 0) + 1);
+    const l = (t.labels && t.labels[0] || {}).name; if (l) lab[l] = (lab[l] || 0) + 1; });
+  const rep = Object.entries(cnt).filter(([, v]) => v > 1).sort((a, b) => b[1] - a[1]);
+  const repL = Object.entries(lab).filter(([, v]) => v > 1).sort((a, b) => b[1] - a[1]);
+  const uniq = Object.keys(cnt).length;
+  out.push(`<h3>Artiesten en labels</h3><div>${n} tracks van ${uniq} artiesten${Object.keys(lab).length ? ` op ${Object.keys(lab).length} labels` : ''}.</div>`);
+  if (rep.length) out.push(`<div>Meerdere keren: ${rep.map(([a, v]) => `<b>${esc(a)}</b> ${v}×`).join(', ')}</div>`);
+  if (repL.length) out.push(`<div class="muted">Labels meerdere keren: ${repL.slice(0, 6).map(([a, v]) => `${esc(a)} ${v}×`).join(', ')}</div>`);
+  if (rep.some(([, v]) => v >= 3 || v / n > 0.2)) tips.push(`${esc(rep[0][0])} komt ${rep[0][1]}× voor. Overweeg er een te vervangen, of zet ze ver uit elkaar.`);
+  else if (!rep.length && n >= 6) tips.push('Geen enkele artiest dubbel, lekker gevarieerd.');
+  // types
+  const tc = {}; let typed = 0;
+  T.forEach(t => { const ty = typesOf(t); if (ty && ty.length){ typed++; ty.forEach((k, j) => tc[k] = (tc[k] || 0) + (ty.length > 1 ? (j ? 0.4 : 0.6) : 1)); } });
+  if (typed){
+    const tot = Object.values(tc).reduce((a, b) => a + b, 0);
+    const core = CORE.reduce((a, k) => a + (tc[k] || 0), 0) / tot;
+    out.push(`<h3>Soorten (${typed} van ${n} ingedeeld)</h3><div class="bar">${TYPES.map(([k]) => tc[k] ? `<span title="${typeName(k)}" style="width:${100 * tc[k] / tot}%;background:${TYPE_COL[k]}"></span>` : '').join('')}</div>
+      <div class="small">${TYPES.filter(([k]) => tc[k]).map(([k, nm]) => `<span style="color:${TYPE_COL[k]}">■</span> ${nm} ${Math.round(100 * tc[k] / tot)}%`).join(' · ')}</div>
+      <div>Kern (minimal, hypnotic, deep): <b>${Math.round(core * 100)}%</b>, kleur: ${Math.round((1 - core) * 100)}%</div>`);
+    if (core < 0.5) tips.push(`Maar ${Math.round(core * 100)}% kern. Er zit veel kleur in; voeg wat minimal, hypnotic of deep toe als ruggengraat.`);
+    else if (core > 0.9 && n >= 8) tips.push('Bijna alles is kern. Een tool, ambient of breaky track op het juiste moment geeft kleur en een adempauze.');
+    else tips.push(`Goede verhouding: ${Math.round(core * 100)}% kern met ${Math.round((1 - core) * 100)}% kleur.`);
+    const missing = CORE.filter(k => !tc[k]);
+    if (missing.length && n >= 6) tips.push('Geen ' + missing.map(typeName).join(' of ') + ' in de selectie.');
+    const dom = CORE.map(k => [k, (tc[k] || 0) / tot]).sort((a, b) => b[1] - a[1])[0];
+    if (dom[1] > 0.65) tips.push(`${typeName(dom[0])} overheerst (${Math.round(dom[1] * 100)}%). Prima als dat de bedoeling is, anders wat meer afwisseling binnen de kern.`);
+    if (typed < n) tips.push(`${n - typed} tracks hebben nog geen type. Klik op "+ type" om ze in te delen (dat traint de app ook).`);
+  }
+  // groove & danceability
+  const gs = T.map(t => [t, grooveOf(t)]).filter(([, g]) => g != null);
+  const bpms = T.map(bpmOf).filter(b => b > 0);
+  if (gs.length){
+    const avg = Math.round(gs.reduce((a, [, g]) => a + g, 0) / gs.length);
+    const low = gs.filter(([, g]) => g < 35).sort((a, b) => a[1] - b[1]);
+    out.push(`<h3>Groove</h3><div>Gemiddelde groove: <b>${avg}/100</b> ${avg >= 60 ? '(stevig, goed dansbaar)' : avg >= 40 ? '(dansbaar, met ruimte)' : '(eerder luister- dan dansmateriaal)'}. Geschat uit de preview: strakke kick, herhaling, ritmische dichtheid en laag.</div>`
+      + (low.length ? `<div class="muted">Minst dansbaar: ${low.slice(0, 4).map(([t, g]) => `${esc(t.artist)} – ${esc(t.title)} (${g})`).join(', ')}</div>` : ''));
+    if (avg < 40) tips.push('De groove is aan de lage kant. Zet een paar strakke tools of hypnotic rollers in het midden om de vloer vast te houden.');
+    if (low.length >= 2 && avg >= 40) tips.push('De tracks met weinig groove werken het best aan het begin, het eind of als adempauze tussen twee rollers.');
+  }
+  if (bpms.length){
+    const bs = bpms.slice().sort((a, b) => a - b), md = bs[Math.floor(bs.length / 2)];
+    out.push(`<div>BPM: ${bs[0]}–${bs[bs.length - 1]}, mediaan ${md}.</div>`);
+    if (bs[bs.length - 1] - bs[0] > 14) tips.push(`Grote BPM-spreiding (${bs[0]}–${bs[bs.length - 1]}). Bouw de BPM geleidelijk op, of laat de uitschieters weg.`);
+    const jumps = []; for (let i = 1; i < T.length; i++){ const a = bpmOf(T[i - 1]), b = bpmOf(T[i]); if (a && b && Math.abs(a - b) > 6 && Math.abs(a * 2 - b) > 6 && Math.abs(a - b * 2) > 6) jumps.push(i); }
+    if (jumps.length) tips.push(`In de huidige volgorde zit ${jumps.length}× een BPM-sprong van meer dan 6 (bij track ${jumps.map(i => i + 1).join(', ')}).`);
+  }
+  // energy arc
+  const es = T.map(t => energyOf(t));
+  if (es.filter(Boolean).length >= 3){
+    const arc = arcOrder(T);
+    const bars = list => `<div class="arc">${list.map(e => `<span style="height:${(e || 0) * 20}%" title="energie ${e || '?'}"></span>`).join('')}</div>`;
+    out.push(`<h3>Energie</h3><div class="small muted">Huidige volgorde</div>${bars(es)}
+      <div class="small muted">Voorstel: opbouwen, piek rond driekwart, kort uitademen</div>${bars(arc.map(x => x.e))}
+      <button class="btn small" data-pla="arcapply">Zet in deze volgorde</button>`);
+    const hi = es.filter(e => e >= 4).length, lo = es.filter(e => e && e <= 2).length;
+    if (!hi) tips.push('Er zit geen echte piek in (energie 4–5). Zoek met je doel op energie 4–5 een of twee tracks voor het hoogtepunt.');
+    if (!lo && n >= 8) tips.push('Geen rustige tracks (energie 1–2). Voor een warm-up of een adempauze helpen er een of twee.');
+    const first = es.slice(0, Math.ceil(n / 4)).filter(Boolean), last = es.slice(-Math.ceil(n / 4)).filter(Boolean);
+    const av = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+    if (first.length && last.length && av(first) > av(last) + 0.5) tips.push('De energie loopt nu af in plaats van op. Kijk eens naar het voorstel hierboven.');
+    tips.push('Aanpak: begin met deep of minimal op lage energie, laat hypnotic rollers de spanning opbouwen, zet tools op de piek en gebruik ambient of dub als adempauze of afsluiter.');
+  } else tips.push('Nog te weinig tracks gemeten voor een energie-advies. Open de playlist even, de app meet ze vanzelf.');
+  return `<div class="ana"><div class="row"><b class="grow">Analyse van "${esc(pl.name)}"</b><a href="#" data-pla="anaclose">sluit</a></div>${out.join('')}<h3>Tips</h3><ul>${tips.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+}
 function plSugHTML(pl){
   const sg = plSug[pl.id]; if (!sg) return '';
   if (sg.busy) return `<div class="small muted" style="margin:6px 0">${esc(sg.msg || 'Zoeken…')}</div>`;
@@ -2445,12 +2541,14 @@ function renderPlaylists(){
         <button class="btn small" data-pla="csv">Download CSV</button>
         <button class="btn small" data-pla="play">▶ Speel af</button>
         <button class="btn primary small" data-pla="suggest">✨ Wat past hierbij?</button>
+        <button class="btn small" data-pla="analyse">📊 Analyse</button>
         <button class="btn small" data-pla="sortup">Sorteer: energie oplopend</button>
         <button class="btn primary small" data-pla="tospotify">${pl.spotifyUrl ? 'Update in Spotify' : 'Zet in Spotify'}</button>
         ${pl.spotifyUrl ? `<a class="btn small" href="${esc(pl.spotifyUrl)}" target="_blank" rel="noopener">Open in Spotify</a>` : ''}
         <button class="btn small" data-pla="rename">Hernoem</button>
         <button class="btn small" data-pla="del">Verwijder</button>
       </div>
+      <div data-plana="${pl.id}">${plAna[pl.id] || ''}</div>
       <div class="plsug" data-plsug="${pl.id}">${plSugHTML(pl)}</div>
       ${pl.tracks.map((t, i) => `<div class="plrow" data-ti="${i}"><span class="muted small">${i + 1}</span><button class="play" data-pla="playone" title="Preview">▶</button>
         <span>${esc(t.artist)} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
@@ -2492,6 +2590,18 @@ $('#plList').addEventListener('click', async e => {
     const bx = document.querySelector(`[data-plsug="${pl.id}"]`); if (bx){ bx.innerHTML = plSugHTML(pl); fillAvailability(bx, plSug[pl.id].list || []); queueEnergy(plSug[pl.id].list || []); }
     return;
   }
+  if (a === 'analyse'){
+    const box = card.querySelector('[data-plana]');
+    box.innerHTML = '<div class="ana small muted">Playlist beluisteren…</div>';
+    await measureMany(pl.tracks.map(asItem), (d, n) => { box.innerHTML = `<div class="ana small muted">Playlist beluisteren ${d}/${n}…</div>`; });
+    plAna[pl.id] = analysePlaylist(pl);
+    renderPlaylists(); return;
+  }
+  if (a === 'anaclose'){ e.preventDefault(); delete plAna[pl.id]; renderPlaylists(); return; }
+  if (a === 'arcapply'){
+    const order = arcOrder(pl.tracks).map(x => x.t);
+    pl.tracks = order; save(); plAna[pl.id] = analysePlaylist(pl); renderPlaylists(); toast('Volgorde aangepast'); return;
+  }
   if (a === 'sugclose'){ e.preventDefault(); delete plSug[pl.id]; card.querySelector('[data-plsug]').innerHTML = ''; return; }
   if (a === 'addsug'){
     const c = (plSug[pl.id] || {}).list[+b.dataset.si]; if (!c) return;
@@ -2522,6 +2632,7 @@ $('#plList').addEventListener('click', async e => {
   if (a === 'up' && i > 0) [pl.tracks[i - 1], pl.tracks[i]] = [pl.tracks[i], pl.tracks[i - 1]];
   if (a === 'down' && i < pl.tracks.length - 1) [pl.tracks[i + 1], pl.tracks[i]] = [pl.tracks[i], pl.tracks[i + 1]];
   if (a === 'rm') pl.tracks.splice(i, 1);
+  if (plAna[pl.id]) plAna[pl.id] = analysePlaylist(pl);
   save(); renderPlaylists();
 });
 
