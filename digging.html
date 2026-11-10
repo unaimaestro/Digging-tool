@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="33">
+<meta name="dt-version" content="34">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
+<script>
+// One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
+// Shared updates reach every tool; tool-specific settings live in VARIANTS (script) and html[data-variant] (CSS).
+window.DT_VARIANT = location.port === '8766' ? 'house' : 'techno';
+document.documentElement.setAttribute('data-variant', window.DT_VARIANT);
+</script>
 <style>
 :root{
   --bg:#110b0a;--panel:#1a1110;--panel2:#261715;--line:#3a2520;--text:#f0e6e0;--muted:#b09c93;
@@ -149,12 +155,25 @@ details.sect:not([open])>summary::before{content:'▸ '}
 #similarPanel .inner{container-type:inline-size}
 body{background:var(--bg)}
 @media (max-width:860px){#app{display:block}header{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding-bottom:16px}nav{flex-direction:row;flex-wrap:wrap}}
+/* ---- house tool: dark purple / pink ---- */
+html[data-variant="house"]{--bg:#0e0914;--panel:#171021;--panel2:#22172f;--line:#382748;--text:#f3e9f7;--muted:#ab9bba;--accent:#c41d7f;--accent-hi:#ff6fb8;--accent-ink:#fff2f9;--red:#5e2185;--red-hi:#a44ad0;--warn:#ff8cc6;--bad:#ff7a9c;--chip:#271b36}
+html[data-variant="house"] header{background:#120c1a}
+html[data-variant="house"] .chip.why,html[data-variant="house"] .chip.avail{background:#3a1636;color:#f7b6dc}
+html[data-variant="house"] .chip.fit{background:#4a1446;color:#ffb3e0}
+html[data-variant="house"] .chip.noavail{background:#251f2b;color:#b9a3c4}
+html[data-variant="house"] .en i{background:#3d2c4a}
+html[data-variant="house"] .en[data-e="1"] i:nth-child(-n+1),html[data-variant="house"] .en[data-e="2"] i:nth-child(-n+2){background:#d7a9e6}
+html[data-variant="house"] .en[data-e="3"] i:nth-child(-n+3){background:#e0559f}
+html[data-variant="house"] .en[data-e="4"] i:nth-child(-n+4),html[data-variant="house"] .en[data-e="5"] i:nth-child(-n+5){background:#b3127a}
+html[data-variant="house"] .tg .chip{background:#36163f;color:#f0b4dc}
+html[data-variant="house"] .rec{border-bottom-color:#241a30}
+html[data-variant="house"] .lbl{color:#d4c3dd}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <h1>Digging Tool</h1>
+  <h1 id="appName">Digging Tool</h1>
   <nav id="nav">
     <button data-tab="recs" class="on">Aanbevelingen</button>
     <button data-tab="sets">Sets</button>
@@ -368,6 +387,17 @@ body{background:var(--bg)}
 <script>
 'use strict';
 const $ = s => document.querySelector(s);
+/* ================= Tools (variants) ================= */
+// Everything else is shared. Put something here only when one tool needs it and the other doesn't.
+const VARIANTS = {
+  techno: {id: 'techno', name: 'Digging Tool', port: 8765, installer: 'Installeer Digging Tool.command', seeds: true,
+    wave: {off: '#54403a', from: '#8f1d17', to: '#e0702a', head: '#ffd9bf'}},
+  house: {id: 'house', name: 'Digging Tool House', port: 8766, installer: 'Installeer Digging Tool House.command', seeds: false,
+    wave: {off: '#45344f', from: '#6a1d8f', to: '#ff4fa8', head: '#ffd6f0'}},
+};
+const VARIANT = VARIANTS[window.DT_VARIANT] || VARIANTS.techno;
+document.title = VARIANT.name;
+{ const h = document.getElementById('appName'); if (h) h.textContent = VARIANT.name; }
 /* ================= Storage ================= */
 const LS_KEY = 'digtool.v1';
 const state = loadState();
@@ -641,7 +671,10 @@ function releaseToItem(rel, p){
 
 /* ================= Profile ================= */
 /* --- extra discovery: small artists and labels around your sound (researched 7 Nov), and names that are too big --- */
-const BOOST = {"artists": [{"name": "Franco Rossi", "c": "A", "why": "Release op Sine Space 7 (label van Isabel Soto en Truxx), gesteund door Setaoc Mass"}, {"name": "Elisa Batti", "c": "A", "why": "Remix op Isabel Soto's *Habitat Alteration* (Sine Space 7)"}, {"name": "Kameliia", "c": "A", "why": "Op AMTK+, het sublabel van Amotik"}, {"name": "Decoder", "c": "A", "why": "AMTK+, split met Kameliia"}, {"name": "D-Leria", "c": "A", "why": "AMTK+005"}, {"name": "Translate", "c": "A", "why": "AMTK+005"}, {"name": "Angioma", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "BLANKA", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "Katnada", "c": "A", "why": "AMTK+006"}, {"name": "Marsch", "c": "A", "why": "AMTK+006, Tresor New Faces"}, {"name": "Decka", "c": "A", "why": "AMTK+002"}, {"name": "Arthur Robert", "c": "A", "why": "AMTK+002"}, {"name": "Tina Ramamurthy", "c": "A", "why": "Gezamenlijke release met Amotik (AMTK 014)"}, {"name": "Kike Pravda", "c": "A", "why": "Semantica (Madrid), dezelfde donkere hypnotische lijn als Mulero"}, {"name": "Geømmetrisch", "c": "A", "why": "Semantica"}, {"name": "Svreca", "c": "A", "why": "Oprichter van Semantica, rauw en hypnotisch zonder grote naam"}, {"name": "Kwartz", "c": "A", "why": "Spaanse hypnotische techno, speelt Amotik"}, {"name": "Sciahri", "c": "A", "why": "Italiaans, diep en hypnotisch, op Mutual Rytm"}, {"name": "Backbone (PT)", "c": "A", "why": "Mutual Rytm"}, {"name": "Pfirter", "c": "A", "why": "Argentijns, MindTrip-label, speelt Amotik"}, {"name": "Exium", "c": "B", "why": "Spaans duo, Nheoma; zelfde school als Mulero en Warm Up"}, {"name": "Reeko", "c": "B", "why": "Spaans, rauw en hypnotisch, Mulero-kring"}, {"name": "Christian Wünsch", "c": "B", "why": "Warm Up / Pole Group, strak en hypnotisch"}, {"name": "Tadeo", "c": "B", "why": "Spaans, diep en ruimtelijk, tool-achtig"}, {"name": "Dino Sabatini", "c": "B", "why": "Italiaans, Outis Music; diep, dubby, tribaal-hypnotisch"}, {"name": "Ness", "c": "B", "why": "Italiaans, hypnotische loops"}, {"name": "Antonio Ruscito", "c": "B", "why": "Italiaans, minimal-hypnotisch"}, {"name": "Mattia Trani", "c": "B", "why": "Italiaans, donker en hypnotisch"}, {"name": "Neel", "c": "B", "why": "Spazio Disponibile, ambient-kant van hypnotic"}, {"name": "Abdulla Rashim", "c": "B", "why": "Dubby, mistige hypnotische techno (Northern Electronics)"}, {"name": "Grad_U", "c": "B", "why": "Russisch, diep en hypnotisch"}, {"name": "Rikhter", "c": "B", "why": "Oekraïens, hypnotische tools (past bij Unit (UA))"}, {"name": "Ryuji Takeuchi", "c": "B", "why": "Japans, hypnotische loop-techno"}, {"name": "Jonas Kopp", "c": "B", "why": "Argentijns, diep en psychedelisch hypnotisch"}, {"name": "Kessell", "c": "B", "why": "Mexicaans, minimalistisch en hypnotisch"}, {"name": "Nørbak", "c": "B", "why": "Deens, diep hypnotisch"}, {"name": "Patrick Siech", "c": "B", "why": "Zweeds, strakke hypnotische grooves"}, {"name": "Temudo", "c": "B", "why": "Portugees, rollend en hypnotisch"}, {"name": "Nur Jaber", "c": "B", "why": "Libanees, diep en hypnotisch, eigen label Out-er"}, {"name": "Antigone", "c": "B", "why": "Frans, breaky en hypnotisch (voor de breaky-kleur)"}], "labels": [{"name": "Sine Space 7", "c": "A", "why": "Isabel Soto, Truxx, Franco Rossi: kern van jouw sound"}, {"name": "AMTK / AMTK+", "c": "A", "why": "Amotik's labels, veel kleine nieuwe namen"}, {"name": "Orbe Records", "c": "A", "why": "Label van ORBE (Fernando Sanz)"}, {"name": "IMMATERIAL Archives", "c": "A", "why": "Giri releaset hier (Schemi, IA024)"}, {"name": "Semantica", "c": "A", "why": "Madrid, rauw en hypnotisch, 200+ releases"}, {"name": "Warm Up / Pole Group", "c": "A", "why": "Oscar Mulero's labels"}, {"name": "Inguma Records", "c": "A", "why": "Isabel Soto (Terra Nova, NGM022)"}, {"name": "Sonov Records (SMV)", "c": "A", "why": "Ignez' minimal-techno EP"}, {"name": "MindTrip", "c": "A", "why": "Pfirter's label, ook Franco Rossi-kring"}, {"name": "Mutual Rytm", "c": "A", "why": "#1 in raw & hypnotic, veel kleine artiesten"}, {"name": "Reclaim Your City", "c": "B", "why": "Hypnotische compilaties, Amotik-kring"}, {"name": "Hypnus", "c": "B", "why": "Zweeds, diep en hypnotisch"}, {"name": "Outis Music", "c": "B", "why": "Dino Sabatini, dub/tribaal-hypnotisch"}, {"name": "Nheoma", "c": "B", "why": "Exium"}, {"name": "Spazio Disponibile", "c": "B", "why": "Ambient-hypnotisch (Neel)"}, {"name": "Vault Records (NL)", "c": "B", "why": "Hypnotische tools"}, {"name": "Prologue", "c": "B", "why": "Diep en hypnotisch (München)"}, {"name": "Echocord / Silent Season", "c": "B", "why": "Voor de dub- en ambient-kleur"}], "tooBig": ["Ben Klock", "Paula Temple", "DJ Nobu", "Luke Slater", "Ben Sims", "DVS1", "Richie Hawtin", "Tommy Four Seven", "Rene Wise", "Chlär", "Rrose", "Dax J", "Kobosil", "Forest Drive West", "Claudio PRC"]};
+const BOOST_TECHNO = {"artists": [{"name": "Franco Rossi", "c": "A", "why": "Release op Sine Space 7 (label van Isabel Soto en Truxx), gesteund door Setaoc Mass"}, {"name": "Elisa Batti", "c": "A", "why": "Remix op Isabel Soto's *Habitat Alteration* (Sine Space 7)"}, {"name": "Kameliia", "c": "A", "why": "Op AMTK+, het sublabel van Amotik"}, {"name": "Decoder", "c": "A", "why": "AMTK+, split met Kameliia"}, {"name": "D-Leria", "c": "A", "why": "AMTK+005"}, {"name": "Translate", "c": "A", "why": "AMTK+005"}, {"name": "Angioma", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "BLANKA", "c": "A", "why": "AMTK+004, samen met ORBE"}, {"name": "Katnada", "c": "A", "why": "AMTK+006"}, {"name": "Marsch", "c": "A", "why": "AMTK+006, Tresor New Faces"}, {"name": "Decka", "c": "A", "why": "AMTK+002"}, {"name": "Arthur Robert", "c": "A", "why": "AMTK+002"}, {"name": "Tina Ramamurthy", "c": "A", "why": "Gezamenlijke release met Amotik (AMTK 014)"}, {"name": "Kike Pravda", "c": "A", "why": "Semantica (Madrid), dezelfde donkere hypnotische lijn als Mulero"}, {"name": "Geømmetrisch", "c": "A", "why": "Semantica"}, {"name": "Svreca", "c": "A", "why": "Oprichter van Semantica, rauw en hypnotisch zonder grote naam"}, {"name": "Kwartz", "c": "A", "why": "Spaanse hypnotische techno, speelt Amotik"}, {"name": "Sciahri", "c": "A", "why": "Italiaans, diep en hypnotisch, op Mutual Rytm"}, {"name": "Backbone (PT)", "c": "A", "why": "Mutual Rytm"}, {"name": "Pfirter", "c": "A", "why": "Argentijns, MindTrip-label, speelt Amotik"}, {"name": "Exium", "c": "B", "why": "Spaans duo, Nheoma; zelfde school als Mulero en Warm Up"}, {"name": "Reeko", "c": "B", "why": "Spaans, rauw en hypnotisch, Mulero-kring"}, {"name": "Christian Wünsch", "c": "B", "why": "Warm Up / Pole Group, strak en hypnotisch"}, {"name": "Tadeo", "c": "B", "why": "Spaans, diep en ruimtelijk, tool-achtig"}, {"name": "Dino Sabatini", "c": "B", "why": "Italiaans, Outis Music; diep, dubby, tribaal-hypnotisch"}, {"name": "Ness", "c": "B", "why": "Italiaans, hypnotische loops"}, {"name": "Antonio Ruscito", "c": "B", "why": "Italiaans, minimal-hypnotisch"}, {"name": "Mattia Trani", "c": "B", "why": "Italiaans, donker en hypnotisch"}, {"name": "Neel", "c": "B", "why": "Spazio Disponibile, ambient-kant van hypnotic"}, {"name": "Abdulla Rashim", "c": "B", "why": "Dubby, mistige hypnotische techno (Northern Electronics)"}, {"name": "Grad_U", "c": "B", "why": "Russisch, diep en hypnotisch"}, {"name": "Rikhter", "c": "B", "why": "Oekraïens, hypnotische tools (past bij Unit (UA))"}, {"name": "Ryuji Takeuchi", "c": "B", "why": "Japans, hypnotische loop-techno"}, {"name": "Jonas Kopp", "c": "B", "why": "Argentijns, diep en psychedelisch hypnotisch"}, {"name": "Kessell", "c": "B", "why": "Mexicaans, minimalistisch en hypnotisch"}, {"name": "Nørbak", "c": "B", "why": "Deens, diep hypnotisch"}, {"name": "Patrick Siech", "c": "B", "why": "Zweeds, strakke hypnotische grooves"}, {"name": "Temudo", "c": "B", "why": "Portugees, rollend en hypnotisch"}, {"name": "Nur Jaber", "c": "B", "why": "Libanees, diep en hypnotisch, eigen label Out-er"}, {"name": "Antigone", "c": "B", "why": "Frans, breaky en hypnotisch (voor de breaky-kleur)"}], "labels": [{"name": "Sine Space 7", "c": "A", "why": "Isabel Soto, Truxx, Franco Rossi: kern van jouw sound"}, {"name": "AMTK / AMTK+", "c": "A", "why": "Amotik's labels, veel kleine nieuwe namen"}, {"name": "Orbe Records", "c": "A", "why": "Label van ORBE (Fernando Sanz)"}, {"name": "IMMATERIAL Archives", "c": "A", "why": "Giri releaset hier (Schemi, IA024)"}, {"name": "Semantica", "c": "A", "why": "Madrid, rauw en hypnotisch, 200+ releases"}, {"name": "Warm Up / Pole Group", "c": "A", "why": "Oscar Mulero's labels"}, {"name": "Inguma Records", "c": "A", "why": "Isabel Soto (Terra Nova, NGM022)"}, {"name": "Sonov Records (SMV)", "c": "A", "why": "Ignez' minimal-techno EP"}, {"name": "MindTrip", "c": "A", "why": "Pfirter's label, ook Franco Rossi-kring"}, {"name": "Mutual Rytm", "c": "A", "why": "#1 in raw & hypnotic, veel kleine artiesten"}, {"name": "Reclaim Your City", "c": "B", "why": "Hypnotische compilaties, Amotik-kring"}, {"name": "Hypnus", "c": "B", "why": "Zweeds, diep en hypnotisch"}, {"name": "Outis Music", "c": "B", "why": "Dino Sabatini, dub/tribaal-hypnotisch"}, {"name": "Nheoma", "c": "B", "why": "Exium"}, {"name": "Spazio Disponibile", "c": "B", "why": "Ambient-hypnotisch (Neel)"}, {"name": "Vault Records (NL)", "c": "B", "why": "Hypnotische tools"}, {"name": "Prologue", "c": "B", "why": "Diep en hypnotisch (München)"}, {"name": "Echocord / Silent Season", "c": "B", "why": "Voor de dub- en ambient-kleur"}], "tooBig": ["Ben Klock", "Paula Temple", "DJ Nobu", "Luke Slater", "Ben Sims", "DVS1", "Richie Hawtin", "Tommy Four Seven", "Rene Wise", "Chlär", "Rrose", "Dax J", "Kobosil", "Forest Drive West", "Claudio PRC"]};
+// house starts without a sound profile: no extra seeds, no example tracks. Add house research here later.
+const BOOST_HOUSE = {artists: [], labels: [], tooBig: []};
+const BOOST = VARIANT.id === 'house' ? BOOST_HOUSE : BOOST_TECHNO;
 const TOO_BIG = new Set(BOOST.tooBig.map(n => norm(n)));
 async function addBoostSeeds(P, onStep){
   const maxRel = P.maxRel || 1;
@@ -1672,8 +1705,8 @@ function waveLayers(src, w, h, dpr){
   if (waveC && waveC.src === src && waveC.w === w && waveC.h === h) return waveC;
   const mk = paint => { const c = document.createElement('canvas'); c.width = w * dpr; c.height = h * dpr; const g = c.getContext('2d'); g.scale(dpr, dpr); paint(g); return c; };
   const bars = (g, fill) => { g.fillStyle = fill; const n = Math.floor(w / 3), st = src.length / n; for (let i = 0; i < n; i++){ let m = 0; for (let j = Math.floor(i * st), e = Math.floor((i + 1) * st); j < e; j++) if (src[j] > m) m = src[j]; const v = Math.max(0.04, m) * (h - 6); g.fillRect(i * 3, (h - v) / 2, 2, v); } };
-  const grad = g => { const l = g.createLinearGradient(0, 0, w, 0); l.addColorStop(0, '#8f1d17'); l.addColorStop(1, '#e0702a'); return l; };
-  return waveC = {src, w, h, off: mk(g => bars(g, '#54403a')), on: mk(g => bars(g, grad(g)))};
+  const grad = g => { const l = g.createLinearGradient(0, 0, w, 0); l.addColorStop(0, VARIANT.wave.from); l.addColorStop(1, VARIANT.wave.to); return l; };
+  return waveC = {src, w, h, off: mk(g => bars(g, VARIANT.wave.off)), on: mk(g => bars(g, grad(g)))};
 }
 function drawWave(){
   const cv = $('#wave'), dpr = window.devicePixelRatio || 1;
@@ -1687,11 +1720,11 @@ function drawWave(){
     const L = waveLayers(src, w, h, dpr), x = Math.round(cv.width * prog);
     g.drawImage(L.off, 0, 0);
     if (x > 0) g.drawImage(L.on, 0, 0, x, cv.height, 0, 0, x, cv.height);
-    g.fillStyle = '#ffd9bf'; if (eng && eng.dur()) g.fillRect(x, 0, dpr, cv.height);
+    g.fillStyle = VARIANT.wave.head; if (eng && eng.dur()) g.fillRect(x, 0, dpr, cv.height);
   } else {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = '#54403a'; g.fillRect(0, h / 2 - 2, w, 4);
-    g.fillStyle = '#e0702a'; g.fillRect(0, h / 2 - 2, w * prog, 4);
+    g.fillStyle = VARIANT.wave.off; g.fillRect(0, h / 2 - 2, w, 4);
+    g.fillStyle = VARIANT.wave.to; g.fillRect(0, h / 2 - 2, w * prog, 4);
   }
 }
 // true when the bars come from the 30s fragment while a full track is playing: then they are an impression, not exact
@@ -2779,7 +2812,7 @@ async function pushToSpotify(pl, btn){
     btn.textContent = 'Playlist maken…';
     if (!pl.spotifyId){
       const me = state.spUser || await spWeb('/me');
-      const created = await spWeb('/users/' + encodeURIComponent(me.id) + '/playlists', {method: 'POST', body: JSON.stringify({name: pl.name, public: false, description: 'Gemaakt met Digging Tool'})});
+      const created = await spWeb('/users/' + encodeURIComponent(me.id) + '/playlists', {method: 'POST', body: JSON.stringify({name: pl.name, public: false, description: 'Gemaakt met ' + VARIANT.name})});
       pl.spotifyId = created.id; pl.spotifyUrl = created.external_urls && created.external_urls.spotify;
     }
     // replace the contents in chunks of 100
@@ -3142,7 +3175,7 @@ $('#exPasteBtn').onclick = () => {
 };
 $('#exRetrain').onclick = () => measureExamples(true);
 // your examples (sent on 7 Nov) are added once per batch
-if ((state.examplesSeeded || 0) < 2){ state.examples = (state.examples || []).concat(DEFAULT_EXAMPLES.filter(x => !(state.examples || []).some(y => exKey(y) === exKey(x) && y.type === x.type))); state.examplesSeeded = 2; save(); }
+if (VARIANT.seeds && (state.examplesSeeded || 0) < 2){ state.examples = (state.examples || []).concat(DEFAULT_EXAMPLES.filter(x => !(state.examples || []).some(y => exKey(y) === exKey(x) && y.type === x.type))); state.examplesSeeded = 2; save(); }
 renderExamples();
 setTimeout(() => measureExamples(), 2500);
 
@@ -3304,7 +3337,7 @@ function rbBuild(m, keepRating){
     if (res.rated) stats.rated++; if (res.changed) stats.changed++; if (res.kept) stats.kept++; if (res.typed) stats.typed++;
   });
   const nodes = m.pls.map(p => `<NODE Name="${esc(p.name)}" Type="1" KeyType="0" Entries="${p.ids.length}">${p.ids.map(id => `<TRACK Key="${esc(id)}"/>`).join('')}</NODE>`);
-  const folder = nodes.length ? `<NODE Type="0" Name="Digging Tool" Count="${nodes.length}">${nodes.join('\n')}</NODE>` : '';
+  const folder = nodes.length ? `<NODE Type="0" Name="${VARIANT.name}" Count="${nodes.length}">${nodes.join('\n')}</NODE>` : '';
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<DJ_PLAYLISTS Version="1.0.0">\n<PRODUCT Name="Digging Tool" Version="${APP_VERSION}" Company=""/>\n`
     + `<COLLECTION Entries="${rows.length}">\n${rows.join('\n')}\n</COLLECTION>\n`
     + `<PLAYLISTS><NODE Type="0" Name="ROOT" Count="${nodes.length ? 1 : 0}">${folder}</NODE></PLAYLISTS>\n</DJ_PLAYLISTS>\n`;
@@ -3373,7 +3406,7 @@ if (SERVED){
 }
 // Spotify only accepts 127.0.0.1 (not "localhost"). Browsers keep data per address, so move everything over automatically.
 (function migrate(){
-  const target = location.protocol === 'file:' ? 'http://127.0.0.1:8765/digging.html' : 'http://127.0.0.1:' + (location.port || '8765') + location.pathname;
+  const target = location.protocol === 'file:' ? 'http://127.0.0.1:' + VARIANT.port + '/digging.html' : 'http://127.0.0.1:' + (location.port || VARIANT.port) + location.pathname;
   if (location.hostname === 'localhost'){
     const {token, ...data} = state;
     const has = (data.sets || []).length || (data.likes || []).length || (data.playlists || []).length;
@@ -3389,7 +3422,7 @@ if (SERVED){
     bar.className = 'card'; bar.style.cssText = 'margin:16px;border-color:var(--warn)';
     const {lastRecs, ...data} = state;
     bar.innerHTML = '<h2 style="margin-top:0">Je hebt een los bestand geopend</h2>'
-      + '<p class="small muted">De app werkt alleen goed via <b>http://127.0.0.1:8765</b>. Heb je "Installeer Digging Tool" al één keer uitgevoerd, klik dan hieronder. Anders: voer eerst die installatie uit (zie de uitleg in de chat).</p>'
+      + '<p class="small muted">De app werkt alleen goed via <b>http://127.0.0.1:' + VARIANT.port + '</b>. Heb je "' + esc(VARIANT.installer.replace('.command', '')) + '" al één keer uitgevoerd, klik dan hieronder. Anders: voer eerst die installatie uit (zie de uitleg in de chat).</p>'
       + (has
         ? `<p class="small">In dit bestand staan nog <b>${state.sets.length} sets, ${state.likes.length} likes en ${state.playlists.length} playlists</b>. Met de knop neem je ze mee.</p><a class="btn primary" href="${target}#migrate=${encodeURIComponent(JSON.stringify(data))}">Open de app en neem alles mee</a>`
         : `<a class="btn primary" href="${target}">Open de app</a>`);
