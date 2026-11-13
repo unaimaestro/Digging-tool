@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="35">
+<meta name="dt-version" content="36">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -240,6 +240,8 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
 
 <section id="tab-recs" class="on">
   <div class="progress" id="genProg" hidden><div></div></div>
+  <div class="row" id="promptRow" style="margin-bottom:6px"><input id="promptQ" class="grow" type="search" autocomplete="off" placeholder="Beschrijf wat je zoekt, bijv. underground sexy house, niet te hard"><button class="btn primary" id="promptGo">Zoek</button></div>
+  <div class="small" id="promptMsg" style="margin-bottom:6px"></div>
   <div class="small muted" id="genMsg" style="margin-bottom:8px"></div>
   <div class="toolbar" id="pushBar"></div>
   <div class="toolbar" id="viewTabs"></div>
@@ -748,7 +750,8 @@ function buildProfile(T){
   plTracksAll().forEach(t => { add(t, 1.2); markSeen(P, t); });
   if (HOUSE && state.hp){
     // house: your profile tracks are the seeds (the ones you confirmed count a bit more); doubtful ones only count as "already known"
-    state.hp.tracks.forEach(t => { const it = hpItem(t); if (hpValid(t)) add(it, t.door_gebruiker_bevestigd ? 1.5 : 1); markSeen(P, it); });
+    // tracks that match the words you typed (sexy, donker, …) count three times as much
+    state.hp.tracks.forEach(t => { const it = hpItem(t); if (hpValid(t)) add(it, (t.door_gebruiker_bevestigd ? 1.5 : 1) * (promptHit(t) ? 3 : 1)); markSeen(P, it); });
     const off = state.hpLabelsOff || {};
     Object.keys((state.hp.ontdekking || {}).labels || {}).forEach(l => {
       const name = hpLabelName(l), k = lk(name);
@@ -1661,6 +1664,7 @@ function hpFit(c){
   } else f *= 0.85;
   const sh = st.filter(x => H.s[x]);
   if (sh.length){ f *= 1.15; why.push(sh.join(', ')); }
+  { const pt = promptHit(t.derived || {}); if (pt){ f *= 1.2; why.push('past bij je zoekopdracht'); } }
   const b = bpmOf(c);
   if (b){ const ok = x => x >= H.lo - 2 && x <= H.hi + 2; if (!(ok(b) || ok(b * 2) || ok(b / 2))) f *= 0.65; }
   return {f, why: why.length ? 'Past bij profiel: ' + why.join(' · ') : null};
@@ -3902,6 +3906,115 @@ function hpInit(){
   });
 }
 const hp_order = list => state.hp.quick_tags.map(q => q.id).filter(id => list.includes(id));
+
+
+/* ================= Search in your own words ("underground sexy house, niet te hard") =================
+   A word list, no AI: words become buttons/types, sound tags (house), energy, direction and year.
+   What it understood is shown, so you can see and correct it. */
+const PROMPT_TYPES = HOUSE ? {
+  'deep': ['deep', 'diep', 'diepe', 'jazzy'], 'minimal-rolling': ['minimal', 'rolling', 'rollend', 'rollende', 'minimalistisch', 'groovy minimal'],
+  'tribal-latin': ['tribal', 'latin', 'latino', 'bongo', 'bongos', 'conga', 'congas', 'tribaal'], 'hypnotic': ['hypnotic', 'hypnotisch', 'hypnotische', 'hypno', 'trancy', 'loopy'],
+  'dub': ['dub', 'dubs'], 'vocal': ['vocal', 'vocals', 'zang', 'gospel', 'soulful', 'stem'], 'jackin-swing': ['jackin', 'jacking', 'swing', 'swingend', 'chicago', 'shuffle'],
+  'breaky': ['breaky', 'breaks', 'gebroken', 'broken', 'electro', 'breakbeat'], 'classic': ['classic', 'classics', 'klassiek', 'klassieker', 'klassiekers', 'oldschool', 'old school', '90s', '90 s', 'jaren 90', '80 s', 'jaren 80', '80s', "80's"],
+  'curveball': ['curveball', 'curveballs', 'raar', 'rare', 'gek', 'gekke', 'verrassend', 'weird'], 'acid': ['acid', '303'],
+} : {
+  minimal: ['minimal', 'filler', 'minimalistisch', 'kaal', 'sparse', 'leeg'], hypnotic: ['hypnotic', 'hypnotisch', 'hypnotische', 'hypno', 'trancy', 'loopy', 'repetitief', 'meditatief'],
+  tool: ['tool', 'tools', 'dj tool', 'functioneel', 'drums', 'drummy', 'tribal', 'percussief', 'percussie'], ambient: ['ambient', 'atmosferisch', 'sfeervol', 'spacy', 'dromerig', 'zweverig', 'ruimtelijk'],
+  deep: ['deep', 'diep', 'diepe'], dub: ['dub', 'dubby', 'echo', 'galm'], broken: ['breaky', 'breaks', 'gebroken', 'broken', 'electro', 'breakbeat'],
+};
+// house only: words that point at sound/style tags of your taxonomy (never new tags)
+const PROMPT_TAGS = {
+  'sexy': {klank: ['sensueel', 'warm', 'swingend'], stijlen: ['deep-house']}, 'sensueel': {klank: ['sensueel']}, 'sensual': {klank: ['sensueel']}, 'zwoel': {klank: ['sensueel', 'warm']}, 'sultry': {klank: ['sensueel', 'warm']},
+  'warm': {klank: ['warm']}, 'donker': {klank: ['donker']}, 'dark': {klank: ['donker']}, 'duister': {klank: ['donker']},
+  'euforisch': {klank: ['euforisch']}, 'euphoric': {klank: ['euforisch']}, 'uplifting': {klank: ['euforisch']}, 'vrolijk': {klank: ['euforisch', 'speels']}, 'happy': {klank: ['euforisch']},
+  'melancholisch': {klank: ['melancholisch']}, 'emotioneel': {klank: ['melancholisch', 'warm']}, 'speels': {klank: ['speels']}, 'playful': {klank: ['speels']},
+  'rauw': {klank: ['rauw']}, 'raw': {klank: ['rauw']}, 'gritty': {klank: ['rauw']}, 'dirty': {klank: ['rauw']}, 'vies': {klank: ['rauw']},
+  'spacy': {klank: ['ruimtelijk']}, 'ruimtelijk': {klank: ['ruimtelijk']}, 'dubby': {klank: ['dubby']}, 'droog': {klank: ['droog']}, 'percussief': {klank: ['percussief']}, 'percussie': {klank: ['percussief']},
+  'piano': {klank: ['piano-orgel']}, 'orgel': {klank: ['piano-orgel']}, 'vocal chops': {klank: ['vocal-chops']}, 'garage': {stijlen: ['garage-house', 'uk-garage']},
+  'afro': {stijlen: ['afro-house']}, 'disco': {stijlen: ['disco-house']}, 'funky': {stijlen: ['funky-house'], klank: ['speels']}, 'organic': {stijlen: ['organic-house']},
+  'progressive': {stijlen: ['progressive-house-modern']}, 'ghetto': {stijlen: ['ghetto-house']}, 'balearic': {stijlen: ['balearic']}, 'raw house': {stijlen: ['raw-house']},
+};
+const PROMPT_LOW = ['rustig', 'rustige', 'chill', 'zacht', 'ingetogen', 'warm-up', 'warmup', 'warm up', 'opener', 'laid back', 'laidback', 'mellow', 'kalm', 'relaxed', 'langzaam', 'slow', 'ochtend', 'afterhours', 'after hours'];
+const PROMPT_HIGH = ['hard', 'harde', 'peak', 'peaktime', 'peak time', 'piek', 'stuwend', 'stuwende', 'banger', 'bangers', 'driving', 'energiek', 'beuk', 'beukend', 'snel', 'fast', 'intens', 'rave', 'knallers'];
+const PROMPT_MID = ['medium', 'gemiddeld', 'midtempo', 'mid tempo', 'gestaag'];
+const PROMPT_UNDER = ['underground', 'onbekend', 'onbekende', 'obscure', 'obscuur', 'hidden', 'verborgen', 'klein', 'kleine', 'niche', 'onontdekt', 'parels', 'gems', 'longtail', 'long tail'];
+const PROMPT_KNOWN = ['klassiekers', 'klassieker', 'classics', 'klassiek', 'bekend', 'bekende', 'hits', 'hit', 'populair', 'populaire', 'anthems', 'anthem'];
+const PROMPT_NEW = ['nieuw', 'nieuwe', 'recent', 'recente', 'new', 'fresh', 'vers', 'verse'];
+const PROMPT_STOP = new Set(['ik', 'zoek', 'zoeken', 'wil', 'graag', 'wat', 'meer', 'iets', 'een', 'de', 'het', 'en', 'of', 'met', 'van', 'voor', 'in', 'op', 'die', 'dat', 'maar', 'te', 'heel', 'erg', 'beetje', 'echt', 'lekker', 'lekkere', 'mooi', 'mooie', 'goede', 'goed', 'tracks', 'track', 'releases', 'release', 'muziek', 'nummers', 'platen', 'sound', 'soort', 'house', 'techno', 'some', 'more', 'i', 'want', 'looking', 'for', 'and', 'with', 'a', 'the', 'stuff', 'vibe', 'vibes', 'set', 'voor', 'mijn', 'graag', 'zijn', 'is', 'mag', 'moet', 'geef', 'me', 'mij', 'beetje', 'zo', 'zoals', 'dan', 'ook', 'nog', 'niet', 'geen', 'not', 'too']);
+function parsePrompt(text){
+  // Dutch endings: "donkere" -> "donker", "warme" -> "warm", "rauwe" -> "rauw"
+  const known = w => PROMPT_TAGS[w] || Object.values(PROMPT_TYPES).some(l => l.includes(w));
+  const raw = ' ' + norm(text).split(' ').map(w => !known(w) && w.endsWith('e') && known(w.slice(0, -1)) ? w.slice(0, -1) : w).join(' ') + ' ';
+  let rest = raw;
+  const used = phrase => { const re = new RegExp(' ' + phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' '); if (re.test(rest)){ rest = rest.replace(re, ' '); return true; } return false; };
+  const P = {types: [], lo: 1, hi: 5, pop: null, minYear: null, tags: {klank: [], stijlen: []}, unknown: [], energy: false};
+  // "niet te hard" / "niet te rustig" first, then explicit energy numbers
+  if (used('niet te hard') || used('niet hard') || used('not too hard')){ P.hi = 3; P.energy = true; }
+  if (used('niet te rustig') || used('niet rustig')){ P.lo = 3; P.energy = true; }
+  const en = /energie ([1-5])(?: (?:tot |t m )?([1-5]))?/.exec(rest);
+  if (en){ P.lo = +en[1]; P.hi = +(en[2] || en[1]); P.energy = true; rest = rest.replace(en[0], ' '); }
+  const yr = /(?:vanaf|na|since|from) (19[5-9]\d|20[0-3]\d)/.exec(rest);
+  if (yr){ P.minYear = +yr[1]; rest = rest.replace(yr[0], ' '); }
+  const has = list => { let hit = false; list.slice().sort((a, b) => b.length - a.length).forEach(w => { while (used(w)) hit = true; }); return hit; };
+  // energy words first, so "warm up" is a warm-up and not the sound "warm"
+  if (has(PROMPT_LOW)){ P.lo = 1; P.hi = Math.min(P.hi, 2); P.energy = true; }
+  if (has(PROMPT_MID)){ P.lo = Math.max(P.lo, 2); P.hi = Math.min(P.hi, 4); P.energy = true; }
+  if (has(PROMPT_HIGH)){ P.lo = Math.max(P.lo, 4); P.hi = 5; P.energy = true; }
+  // types / buttons (only the ones this tool has)
+  Object.entries(PROMPT_TYPES).forEach(([k, words]) => { if (!TYPES.some(t => t[0] === k)) return; if (has(words)) P.types.push(k); });
+  // any button by its own name (also buttons you added yourself)
+  TYPES.forEach(([k, n]) => { if (!P.types.includes(k) && n.toLowerCase().split(/[\/\s]+/).filter(w => w.length > 2).some(w => used(norm(w)))) P.types.push(k); });
+  if (HOUSE && state.hp){
+    Object.entries(PROMPT_TAGS).sort((a, b) => b[0].length - a[0].length).forEach(([w, t]) => { if (used(w)){ (t.klank || []).forEach(x => { if (hpTagOk('klank', x) && !P.tags.klank.includes(x)) P.tags.klank.push(x); }); (t.stijlen || []).forEach(x => { if (hpTagOk('stijlen', x) && !P.tags.stijlen.includes(x)) P.tags.stijlen.push(x); }); } });
+    // a word that is (part of) a style or sound tag in your taxonomy, e.g. "chicago" or "subbas"
+    rest.trim().split(' ').filter(w => w.length > 3 && !PROMPT_STOP.has(w)).forEach(w => {
+      const st = hpGroups('stijlen').filter(x => x === w || x.split('-').includes(w)), kl = hpGroups('klank').filter(x => x === w || x.split('-').includes(w));
+      if (st.length || kl.length){ st.forEach(x => P.tags.stijlen.includes(x) || P.tags.stijlen.push(x)); kl.forEach(x => P.tags.klank.includes(x) || P.tags.klank.push(x)); used(w); }
+    });
+  }
+  if (P.lo > P.hi) P.lo = P.hi;
+  if (has(PROMPT_UNDER)) P.pop = 'gems';
+  if (has(PROMPT_KNOWN)){ if (HOUSE){ if (TYPES.some(t => t[0] === 'classic') && !P.types.includes('classic')) P.types.push('classic'); } else P.pop = 'classics'; }
+  if (has(PROMPT_NEW)) P.minYear = new Date().getFullYear() - 3;
+  P.unknown = rest.trim().split(' ').filter(w => w && w.length > 1 && !PROMPT_STOP.has(w) && !/^\d+$/.test(w));
+  return P;
+}
+function describePrompt(P){
+  const parts = [];
+  if (P.types.length) parts.push((HOUSE ? 'knoppen ' : 'types ') + P.types.map(k => (HOUSE ? '+' : '') + typeName(k)).join(', '));
+  if (P.tags.stijlen.length) parts.push('stijl ' + P.tags.stijlen.join(', '));
+  if (P.tags.klank.length) parts.push('klank ' + P.tags.klank.join(', '));
+  if (P.energy) parts.push('energie ' + (P.lo === P.hi ? P.lo : P.lo + '–' + P.hi));
+  parts.push(P.pop === 'classics' ? 'bekendere tracks' : 'verborgen parels');
+  if (P.minYear) parts.push('vanaf ' + P.minYear);
+  return parts.join(' · ');
+}
+async function runPrompt(){
+  const text = $('#promptQ').value.trim(), msg = $('#promptMsg');
+  if (!text){ state.prompt = null; save(); msg.textContent = ''; return; }
+  const P = parsePrompt(text);
+  if (!P.types.length && !P.energy && !P.tags.klank.length && !P.tags.stijlen.length && !P.pop && !P.minYear){
+    msg.innerHTML = `<span class="warn">Ik herkende hier niets in.</span> Probeer woorden als ${esc(TYPES.slice(0, 4).map(t => t[1].toLowerCase()).join(', '))}, rustig/hard, underground${HOUSE ? ', sexy, donker, warm, vocal' : ', donker'}.`;
+    return;
+  }
+  // the description replaces the steering on the left (you can still adjust it there)
+  state.target = {types: P.types, lo: P.lo, hi: P.hi};
+  $('#enMin').value = P.lo; $('#enMax').value = P.hi;
+  $('#popMode').value = P.pop === 'classics' && !HOUSE ? 'classics' : 'gems';
+  $('#minYear').value = P.minYear || '';
+  state.prompt = {text, tags: P.tags};
+  save(); renderTypeChips(); applyDigitalFilter();
+  msg.innerHTML = `Begrepen: <b>${esc(describePrompt(P))}</b>${P.unknown.length ? ` <span class="muted">· niet herkend: ${esc(P.unknown.join(', '))}</span>` : ''}`;
+  $('#genBtn').click();
+}
+// house: does a profile track match the words you typed (sound/style tags)?
+function promptHit(t){
+  const p = state.prompt; if (!p || !p.tags) return 0;
+  return (t.klank || []).filter(x => p.tags.klank.includes(x)).length + (t.stijlen || []).filter(x => p.tags.stijlen.includes(x)).length;
+}
+$('#promptGo').onclick = runPrompt;
+$('#promptQ').addEventListener('keydown', e => { if (e.key === 'Enter') runPrompt(); });
+if (state.prompt && state.prompt.text) $('#promptQ').value = state.prompt.text;
 
 hpInit();
 renderRecs(); refreshStyleFilter();
