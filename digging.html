@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="41">
+<meta name="dt-version" content="42">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -4415,6 +4415,39 @@ async function djFromMixcloud(name, note){
   note('Mixcloud: ' + cands.length + ' sets bekeken, ' + sets.length + ' met tracklist');
   return sets;
 }
+// set79.com: tracklists of SoundCloud sets, recognised per track. Read through the local server (the browser may not reach it).
+async function s79Page(path){
+  const get = async u => { try { const r = await fetch(u); return r.ok ? await r.text() : null; } catch(e){ return null; } };
+  const html = await get('/__s79?p=' + encodeURIComponent(path)) || await get('https://set79.com' + encodeURI(path));
+  return html ? new DOMParser().parseFromString(html, 'text/html') : null;
+}
+async function djFromSet79(name, note){
+  const doc = await s79Page('/dj/' + name);
+  if (!doc){ note('set79 niet bereikbaar' + (scInfo && scInfo.server < 4 ? ' (server nog niet bijgewerkt)' : '')); return []; }
+  const seen = new Set(), links = [];
+  doc.querySelectorAll('a[href*="/tracklist/"]').forEach(a => {
+    const h = decodeURIComponent((a.getAttribute('href') || '').replace(/^https?:\/\/(www\.)?set79\.com/, '')).split(/[?#]/)[0];
+    if (!/^\/tracklist\//.test(h) || seen.has(h)) return; seen.add(h);
+    links.push({path: h, name: (a.textContent || '').trim() || h.split('/').pop().replace(/-/g, ' ')});
+  });
+  const sets = [];
+  for (const l of links.slice(0, 12)){
+    const d = await s79Page(l.path); if (!d) continue;
+    const tracks = [];
+    d.querySelectorAll('tr').forEach(tr => {
+      const a = tr.querySelector('a[href*="/track/"]');
+      if (!a){ if (/\bunknown\b/i.test(tr.textContent || '')) tracks.push({artist: 'ID', title: 'ID'}); return; }
+      const t = decodeURIComponent((a.getAttribute('href') || '').split('/track/')[1] || '').split(/[?#]/)[0] || (a.textContent || '').trim();
+      const i = t.lastIndexOf(' - ');   // set79 writes "Title - Artist"
+      if (i > 0) tracks.push({title: t.slice(0, i).trim(), artist: t.slice(i + 3).trim()});
+    });
+    if (!tracks.length) d.querySelectorAll('a[href*="/track/"]').forEach(a => { const t = decodeURIComponent(a.getAttribute('href').split('/track/')[1] || ''), i = t.lastIndexOf(' - '); if (i > 0) tracks.push({title: t.slice(0, i).trim(), artist: t.slice(i + 3).trim()}); });
+    const title = ((d.querySelector('h1') || {}).textContent || l.name).trim();
+    if (tracks.length >= 3) sets.push({src: 'set79', name: title, url: 'https://set79.com' + encodeURI(l.path), same: l.path.replace(/^\/tracklist\//, '').toLowerCase(), date: '', tracks});
+  }
+  note('set79: ' + sets.length + ' sets met tracklist');
+  return sets;
+}
 async function djFromSoundCloud(name, note){
   if (!scOn()){ note('SoundCloud: niet verbonden'); return []; }
   let r = await fetchJSON('/__sc/artist?name=' + encodeURIComponent(name), 20000);
@@ -4423,7 +4456,7 @@ async function djFromSoundCloud(name, note){
   const seen = new Set(), sets = [];
   all.filter(x => x.dur > 20 * 60000 && !seen.has(x.url) && seen.add(x.url)).forEach(x => {
     const tracks = tracklistFrom(x.desc);
-    if (tracks.length) sets.push({src: 'SoundCloud', name: x.title, url: x.url, date: (x.created || '').slice(0, 10), tracks});
+    if (tracks.length) sets.push({src: 'SoundCloud', name: x.title, url: x.url, same: String(x.url).replace(/^https?:\/\/(www\.)?/, '').toLowerCase(), date: (x.created || '').slice(0, 10), tracks});
   });
   note('SoundCloud: ' + sets.length + ' sets met tracklist' + (r.own || r.other ? '' : ''));
   return sets;
@@ -4477,7 +4510,7 @@ async function openDj(name){
     <div id="djList"></div>
     <details style="margin-top:12px"><summary class="small"><b>Sets waar dit uit komt</b></summary><div id="djSets" class="small"></div></details>
     <details style="margin-top:8px"><summary class="small"><b>Eigen tracks van ${esc(name)}</b> (nieuwste eerst)</summary><div id="djOwn"><div class="small muted">Laden…</div></div></details>
-    <div class="small muted" style="margin-top:10px">Meer tracklists: <a href="https://www.1001tracklists.com/search/result.php?main_search=${encodeURIComponent(name)}" target="_blank" rel="noopener">1001Tracklists</a> · <a href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" tracklist')}" target="_blank" rel="noopener">Google</a>. Plak een tracklist bij Sets om hem mee te nemen in je profiel.</div></details>`;
+    <div class="small muted" style="margin-top:10px">Meer tracklists: <a href="https://set79.com/dj/${encodeURIComponent(name)}" target="_blank" rel="noopener">set79</a> · <a href="https://www.1001tracklists.com/search/result.php?main_search=${encodeURIComponent(name)}" target="_blank" rel="noopener">1001Tracklists</a> · <a href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" tracklist')}" target="_blank" rel="noopener">Google</a>. Plak een tracklist bij Sets om hem mee te nemen in je profiel.</div></details>`;
   $('#srClose').onclick = ev => { ev.preventDefault(); djRun++; box.innerHTML = ''; };
   scrollTo({top: 0, behavior: 'smooth'});
   djOwn(name, run);
@@ -4486,9 +4519,9 @@ async function openDj(name){
   if (hit && Date.now() - hit.t < 3 * 864e5){ sets = hit.d.sets; notes = hit.d.notes; }
   else {
     const note = t => { notes.push(t); if (run === djRun && $('#djMsg')) $('#djMsg').textContent = 'Zoeken… ' + notes.join(' · '); };
-    const parts = await Promise.all([djFromMixcloud(name, note), djFromSoundCloud(name, note), djFromYouTube(name, note)].map(p => p.catch(() => [])));
+    const parts = await Promise.all([djFromSet79(name, note), djFromMixcloud(name, note), djFromSoundCloud(name, note), djFromYouTube(name, note)].map(p => p.catch(() => [])));
     sets = parts.flat();
-    const seenSet = new Set(); sets = sets.filter(s => { const k = norm(s.name); if (seenSet.has(k)) return false; seenSet.add(k); return true; });
+    const seenSet = new Set(); sets = sets.filter(s => { const ks = [norm(s.name), s.same].filter(Boolean); if (ks.some(k => seenSet.has(k))) return false; ks.forEach(k => seenSet.add(k)); return true; });   // the same set via set79 and SoundCloud counts once
     if (sets.length) idb.set(key, {t: Date.now(), d: {sets, notes}});
   }
   if (run !== djRun) return;
