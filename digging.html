@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="52">
+<meta name="dt-version" content="53">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2449,7 +2449,7 @@ function spSdkInit(){
         (Date.now() > state.sp.exp && state.sp.refresh ? spTokenRequest({grant_type: 'refresh_token', refresh_token: state.sp.refresh, client_id: state.spClient}) : Promise.resolve()).then(() => cb(state.sp.access)).catch(() => cb(state.sp.access));
       }});
       spSdk.addListener('ready', ({device_id}) => { spDev = device_id; res(spSdk); });
-      spSdk.addListener('not_ready', () => { spDev = null; });
+      spSdk.addListener('not_ready', () => { spDev = null; spSdkP = null; try { spSdk.disconnect(); } catch(e){} });
       ['initialization_error', 'authentication_error', 'account_error'].forEach(ev => spSdk.addListener(ev, ({message}) => { spSdkP = null; rej(new Error('Spotify: ' + message)); }));
       spSdk.addListener('player_state_changed', st => {
         if (!st) return;
@@ -2479,6 +2479,9 @@ async function playSpotifySdk(uri, token){
 }
 async function playSpotify(uri, token){
   if (spCanSdk()){
+    try { await playSpotifySdk(uri, token); return; }
+    catch(e){ if (token !== playToken) return; spSdkP = null; try { spSdk && spSdk.disconnect(); } catch(x){} }
+    // one fresh try: the in-app player often just lost its connection
     try { await playSpotifySdk(uri, token); return; }
     catch(e){ console.warn('spotify sdk', e); lastLinks.diag = (lastLinks.diag || '') + ' · Spotify in de app: ' + (e.message || 'fout'); if (token !== playToken) return; }
   }
@@ -2596,7 +2599,7 @@ function watchStart(token, src){
     if (token !== playToken || userPaused || !eng){ clearInterval(watchT); return; }
     const pos = eng.pos();
     if (p0 === null) p0 = pos;
-    if (!eng.paused() && pos > p0 + 0.2){ clearInterval(watchT); return; }
+    if (!eng.paused() && pos > p0 + 0.2){ clearInterval(watchT); missRun = 0; return; }
     if (Date.now() - t0 > 7000){
       clearInterval(watchT);
       lastLinks.diag = (lastLinks.diag || '') + ' · ' + src + ' startte niet';
@@ -2605,6 +2608,22 @@ function watchStart(token, src){
     }
   }, 500);
 }
+// Players sometimes stop by themselves (end event missed, stream stalled).
+// Don't leave you in silence: a track that stops moving on its own goes on to the next one.
+let stallAt = 0, stallPos = -1, stallTok = 0;
+setInterval(() => {
+  if (!eng || eng.simple || userPaused || !queue.length){ stallAt = 0; return; }
+  let pos = 0, dur = 0, paused = false;
+  try { pos = eng.pos() || 0; dur = eng.dur() || 0; paused = eng.paused(); } catch(e){ return; }
+  if (stallTok !== playToken || Math.abs(pos - stallPos) > 0.3){ stallTok = playToken; stallPos = pos; stallAt = Date.now(); return; }
+  if (pos < 2) return;                                   // still starting: watchStart handles that
+  const still = Date.now() - stallAt, nearEnd = dur > 30 && pos >= dur - 3;
+  // at the end and nothing happens (missed end event), or stuck mid-track while it says it's playing
+  if ((nearEnd && still > 4000) || (!paused && still > 15000)){
+    stallAt = Date.now() + 1e9;
+    if (qi + 1 < queue.length){ if (!nearEnd) toast('Afspelen bleef hangen, door naar de volgende track'); playIndex(qi + 1); }
+  }
+}, 1000);
 async function startNextSource(token){
   const it = queue[qi];
   while (srcIdx < srcList.length){
@@ -2676,20 +2695,30 @@ async function linkOn(it, p, L){
   if (p === 'deezer'){ if (it.dzTrackId) return it.dzTrackId; const pv = await findPreview(it.artist, it.title).catch(() => ({})); const m = (pv.deezer || '').match(/track\/(\d+)/); return m ? +m[1] : null; }
   return null;
 }
+let missRun = 0, missT = null;
 function strictMiss(it, p, why){
   eng = null; showEmbed(null);
   $('#plInfo').textContent = '';
+  clearTimeout(missT);
   const alt = ['spotify', 'soundcloud', 'youtube', 'preview'].filter(x => x !== p);
-  $('#plDiag').innerHTML = esc(why) + ' <span style="display:inline-flex;gap:4px;margin-left:6px;flex-wrap:wrap">' + alt.map(x => `<button class="btn small" data-once="${x}">Probeer ${PLAT[x]}</button>`).join('') + '<button class="btn small" data-once="next">Volgende ▸</button></span>';
+  // keep the music going: skip to the next track by itself. Only when many in a row fail, stop and say so.
+  const auto = ++missRun <= 6 && qi + 1 < queue.length, tok = playToken;
+  $('#plDiag').innerHTML = esc(why) + (auto ? ' Door naar de volgende track…' : missRun > 6 ? ' Meerdere tracks achter elkaar lukten niet, check of ' + esc(PLAT[p]) + ' verbonden is.' : '')
+    + ' <span style="display:inline-flex;gap:4px;margin-left:6px;flex-wrap:wrap">' + alt.map(x => `<button class="btn small" data-once="${x}">Probeer ${PLAT[x]}</button>`).join('') + '<button class="btn small" data-once="next">Volgende ▸</button></span>';
+  if (auto) missT = setTimeout(() => { if (tok === playToken) playIndex(qi + 1, false, true); }, 2500);
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-once]'); if (!b) return;
+  clearTimeout(missT);
   if (b.dataset.once === 'next') return playIndex(qi + 1);
   playOnce = b.dataset.once; playIndex(qi, true);
 });
-async function playIndex(i, keepOnce){
+async function playIndex(i, keepOnce, autoSkip){
   if (i < 0 || i >= queue.length) return;
   if (!keepOnce) playOnce = null;
+  clearTimeout(missT);
+  if (!autoSkip) missRun = 0;
+  stallAt = 0;
   spSdkActivate();
   qi = i;
   const token = ++playToken;
@@ -4357,7 +4386,7 @@ const SC_FIX = 'for f in server.js server.py; do curl -fsSL https://raw.githubus
 const SERVER_WANT = 5;
 async function scInit(){
   try { const r = await fetch('/__info', {cache: 'no-store'}); scInfo = r.ok ? await r.json() : {server: 1}; } catch(e){ scInfo = {server: 0}; }
-  if (scOn() && !state.scDefaulted && (!state.playerPref || state.playerPref === 'auto')){ state.scDefaulted = 1; state.playerPref = 'soundcloud'; $('#plSrc').value = 'soundcloud'; save(); }
+  if (scOn() && !state.scDefaulted2 && state.playerPref !== 'soundcloud'){ state.scDefaulted = state.scDefaulted2 = 1; state.playerPref = 'soundcloud'; $('#plSrc').value = 'soundcloud'; save(); }
   if (scInfo.server >= 5 && scInfo.server < SERVER_WANT) fetch('/__server-update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
   scStatus();
 }
