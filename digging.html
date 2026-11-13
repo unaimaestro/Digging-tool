@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="53">
+<meta name="dt-version" content="54">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -1321,11 +1321,18 @@ function jsonp(url, cbParam = 'callback', timeout = 8000){
 // Deezer API (no key needed). Max 50 calls per 5s, so keep a small gap.
 const DZ = 'https://api.deezer.com';
 let dzChain = Promise.resolve(), dzLast = 0;
-function dz(path, params = {}, ttlMs = CACHE_DAYS * 864e5){
+function dz(path, params = {}, ttlMs = CACHE_DAYS * 864e5, prio){
   const qs = new URLSearchParams(params); qs.set('output', 'jsonp');
   const key = 'dz:' + path + '?' + qs.toString();
   return (async () => {
     if (ttlMs){ const hit = await idb.get(key); if (hit && Date.now() - hit.t < ttlMs) return hit.d; }
+    // something you're waiting for (search box): skip the queue of background lookups
+    if (prio){
+      const d = await jsonp(DZ + path + '?' + qs.toString(), 'callback', 6000);
+      if (d && d.error){ if (d.error.code === 800) return null; throw new Error('Deezer: ' + (d.error.message || 'fout')); }
+      if (d && ttlMs) idb.set(key, {t: Date.now(), d});
+      return d;
+    }
     const p = dzChain.then(async () => {
       for (let attempt = 0; attempt < 3; attempt++){
         const wait = dzLast + 130 - Date.now(); if (wait > 0) await sleep(wait);
@@ -3262,11 +3269,16 @@ const spToHit = x => ({from: 'Spotify', artist: x.artists.map(a => a.name).join(
 const dzToHit = x => ({from: 'Deezer', artist: (x.artist || {}).name || '', title: x.title, album: (x.album || {}).title || '', thumb: (x.album || {}).cover_small || '', dzTrackId: x.id, preview: x.preview, raw: x});
 async function runSearch(q){
   const n = ++searchN, box = $('#searchRes');
-  box.hidden = false; box.innerHTML = '<div class="small muted" style="padding:8px">Zoeken…</div>';
+  playBusyUntil = Date.now() + 8000;      // background measuring waits while you search
+  const qName0 = q.replace(/\s+/g, ' ').trim();
+  box.hidden = false; box.innerHTML = `<div class="sr"><span></span><div class="ph"></div><div class="n"><b>Wat draait ${esc(qName0)}?</b><span>Tracks uit tracklists van hun sets, met ID's, en hun eigen tracks</span></div><span class="small muted">Artiest</span><button class="btn small primary" data-srdj="0">Bekijk</button></div><div class="small muted" style="padding:8px">Tracks zoeken…</div>`;
+  searchDjs = [qName0];
+  // each source gets a few seconds; a slow one never blocks the rest
+  const cap = (pr, ms = 7000) => Promise.race([pr, new Promise(r => setTimeout(() => r([]), ms))]);
   const [sp, dzr, dza] = await Promise.all([
-    spConnected() ? spWeb('/search?type=track&limit=8&q=' + encodeURIComponent(q)).then(d => ((d.tracks || {}).items || []).map(spToHit)).catch(() => []) : [],
-    dz('/search', {q, limit: 8}, 36e5).then(d => ((d || {}).data || []).map(dzToHit)).catch(() => []),
-    dz('/search/artist', {q, limit: 5}, 36e5).then(d => ((d || {}).data || []).filter(a => norm(a.name).startsWith(norm(q)) || norm(q).startsWith(norm(a.name))).slice(0, 2)).catch(() => []),
+    cap(spConnected() ? spWeb('/search?type=track&limit=8&q=' + encodeURIComponent(q)).then(d => ((d.tracks || {}).items || []).map(spToHit)).catch(() => []) : []),
+    cap(dz('/search', {q, limit: 8}, 36e5, true).then(d => ((d || {}).data || []).map(dzToHit)).catch(() => [])),
+    cap(dz('/search/artist', {q, limit: 5}, 36e5, true).then(d => ((d || {}).data || []).filter(a => norm(a.name).startsWith(norm(q)) || norm(q).startsWith(norm(a.name))).slice(0, 2)).catch(() => [])),
   ]);
   if (n !== searchN) return;
   const seen = new Set();
@@ -3281,7 +3293,7 @@ async function runSearch(q){
       <div class="n"><b>${esc(h.title)}</b><span>${esc(h.artist)}${h.album ? ' · ' + esc(h.album) : ''}</span></div>
       <span class="small muted">${h.from}</span>
       <button class="btn small primary" data-srr="${i}">Aanbevelingen</button>
-    </div>`).join('') : '');
+    </div>`).join('') : '<div class="small muted" style="padding:8px">Geen tracks gevonden voor "' + esc(q) + '". Check je spelling of zoek op artiest + titel.</div>');
 }
 $('#searchQ').addEventListener('input', e => { clearTimeout(searchT); const q = e.target.value.trim(); if (q.length < 2){ searchN++; $('#searchRes').hidden = true; return; } searchT = setTimeout(() => runSearch(q), 300); });
 $('#searchQ').addEventListener('focus', () => { if ($('#searchRes').innerHTML && $('#searchQ').value.trim().length >= 2) $('#searchRes').hidden = false; });
