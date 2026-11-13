@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="36">
+<meta name="dt-version" content="37">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2577,8 +2577,8 @@ function recHTML(c, i, ctx){
 }
 const inlineLists = {};
 let inlineN = 0;
-let searchList = [];
-const ctxLists = new Proxy({recs: () => state.lastRecs, sim: () => simList, likes: () => state.likes, search: () => searchList}, {
+let searchList = [], hitList = [];
+const ctxLists = new Proxy({recs: () => state.lastRecs, sim: () => simList, likes: () => state.likes, search: () => searchList, hit: () => hitList}, {
   get: (o, k) => o[k] || (() => inlineLists[k] || []),
 });
 let simList = [];
@@ -2977,7 +2977,7 @@ $('#searchQ').addEventListener('keydown', e => { if (e.key === 'Escape') $('#sea
 document.addEventListener('click', e => { if (!e.target.closest('#searchWrap')) $('#searchRes').hidden = true; });
 $('#searchRes').addEventListener('click', e => {
   const p = e.target.closest('[data-srp]'), r = e.target.closest('[data-srr]');
-  if (p){ const h = searchHits[+p.dataset.srp]; playQueue([{artist: h.artist, title: h.title, preview: h.preview, dzTrackId: h.dzTrackId}], 0); }
+  if (p){ const h = searchHits[+p.dataset.srp]; playQueue([{artist: h.artist, title: h.title, preview: h.preview, dzTrackId: h.dzTrackId}], 0); openHit(h); }
   if (r) recsFromHit(searchHits[+r.dataset.srr]);
 });
 // recommendations run on the Deezer network, so a Spotify hit is first looked up there
@@ -2989,16 +2989,37 @@ async function hitToItem(h){
   } catch(e){}
   return {source: 'deezer', releaseId: 'q' + norm(h.artist + h.title), dzTrackId: null, masterId: null, title: h.title, releaseTitle: h.album, artists: splitArtists(h.artist).map(name => ({name})), labels: [], styles: [], genres: [], year: null, thumb: h.thumb, rank: 0, preview: '', uri: 'https://www.deezer.com/search/' + encodeURIComponent(h.artist + ' ' + h.title)};
 }
+// the track you looked up yourself: a normal row (play, + playlist, like, energy, type) above its recommendations
+function renderHit(item, withRecs){
+  hitList = [item];
+  const el = $('#srSeed'); if (!el) return;
+  el.innerHTML = '<div class="small muted" style="margin:6px 0 2px">Deze track</div>' + COLHEAD + recHTML(item, 0, 'hit').replace('class="det" hidden', 'class="det"') + (withRecs ? '<div class="small muted" style="margin:10px 0 2px">Lijkt erop</div>' : '');
+  fillAvailability(el, hitList); queueEnergy(hitList); applyDigitalFilter();
+}
+// playing a search hit also opens it, so you can put it in a playlist or tag it without asking for recommendations
+async function openHit(h){
+  $('#searchRes').hidden = true;
+  showTab('recs');
+  const box = $('#searchRecs'), run = ++recRun;
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Gezocht: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a></summary><div id="srSeed"><div class="small muted">Laden…</div></div><button class="btn small primary" id="srRecs" style="margin-top:8px">Aanbevelingen voor deze track</button></details>`;
+  $('#srClose').onclick = ev => { ev.preventDefault(); recRun++; box.innerHTML = ''; };
+  $('#srRecs').onclick = () => recsFromHit(h);
+  const item = await hitToItem(h);
+  if (run !== recRun) return;
+  renderHit(item);
+}
 async function recsFromHit(h){
   $('#searchRes').hidden = true;
   showTab('recs');
   searchN++;
   const box = $('#searchRecs'), run = ++recRun;
-  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Lijkt op: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a><div class="small muted" id="srMsg">Zoeken…</div></summary><div class="progress" id="srProg"><div></div></div><div id="srList"></div></details>`;
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Lijkt op: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a><div class="small muted" id="srMsg">Zoeken…</div></summary><div id="srSeed"></div><div class="progress" id="srProg"><div></div></div><div id="srList"></div></details>`;
   $('#srClose').onclick = ev => { ev.preventDefault(); recRun++; box.innerHTML = ''; };
   scrollTo({top: 0, behavior: 'smooth'});
   try {
     const item = await hitToItem(h);
+    if (run !== recRun) return;
+    renderHit(item, true);
     const list = await similarTo(item, (f, t) => { if (run !== recRun) return; const b = $('#srProg'), m = $('#srMsg'); if (b) b.firstElementChild.style.width = Math.round(f * 100) + '%'; if (m) m.textContent = t || ''; });
     if (run !== recRun) return;
     searchList = list; markSimShown(list.slice(0, 10));
