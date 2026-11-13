@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="34">
+<meta name="dt-version" content="35">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -155,6 +155,15 @@ details.sect:not([open])>summary::before{content:'▸ '}
 #similarPanel .inner{container-type:inline-size}
 body{background:var(--bg)}
 @media (max-width:860px){#app{display:block}header{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding-bottom:16px}nav{flex-direction:row;flex-wrap:wrap}}
+/* ---- house profile screen and keys (only used in the house tool) ---- */
+.hpb{padding:8px 0;border-bottom:1px solid var(--line)}.hpb.edit label{display:block;margin:4px 0}.hpba{float:right;display:flex;gap:4px}
+.hpr{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0}.hpk{min-width:52px}
+.chip.hpt{display:inline-flex;align-items:center;gap:4px}.chip.hpt button{background:none;border:0;color:var(--muted);cursor:pointer;padding:0;font:inherit}
+.hpadd{width:auto;padding:2px 6px;font-size:12px}.hpinv{opacity:.65}.chip.hpme{background:var(--accent);color:var(--accent-ink)}
+.chip.hpz.ok{color:#9be3a6}.chip.hpz.warn{color:var(--warn)}.chip.hpz.bad{color:var(--bad)}
+.hplabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 12px;margin-top:8px}
+.hpx{margin:2px 0 8px}.hpxl{display:grid;gap:8px;margin:8px 0;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.camk{display:block;font-size:11px;color:var(--accent-hi);line-height:1.1}
 /* ---- house tool: dark purple / pink ---- */
 html[data-variant="house"]{--bg:#0e0914;--panel:#171021;--panel2:#22172f;--line:#382748;--text:#f3e9f7;--muted:#ab9bba;--accent:#c41d7f;--accent-hi:#ff6fb8;--accent-ink:#fff2f9;--red:#5e2185;--red-hi:#a44ad0;--warn:#ff8cc6;--bad:#ff7a9c;--chip:#271b36}
 html[data-variant="house"] header{background:#120c1a}
@@ -178,6 +187,7 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
     <button data-tab="recs" class="on">Aanbevelingen</button>
     <button data-tab="sets">Sets</button>
     <button data-tab="profile">Sound-profiel</button>
+    <button data-tab="house" id="navHouse" hidden>House-profiel</button>
     <button data-tab="likes">Likes</button>
     <button data-tab="playlists">Playlists</button>
     <button data-tab="settings">Instellingen</button>
@@ -252,6 +262,10 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
 
 <section id="tab-profile">
   <div id="profileView"></div>
+</section>
+
+<section id="tab-house">
+  <div id="houseView"></div>
 </section>
 
 <section id="tab-playlists">
@@ -396,6 +410,7 @@ const VARIANTS = {
     wave: {off: '#45344f', from: '#6a1d8f', to: '#ff4fa8', head: '#ffd6f0'}},
 };
 const VARIANT = VARIANTS[window.DT_VARIANT] || VARIANTS.techno;
+const HOUSE = VARIANT.id === 'house';
 document.title = VARIANT.name;
 { const h = document.getElementById('appName'); if (h) h.textContent = VARIANT.name; }
 /* ================= Storage ================= */
@@ -435,7 +450,8 @@ function mergeData(d){
   if (d.shown && typeof d.shown === 'object') Object.entries(d.shown).forEach(([k, v]) => { state.shown = state.shown || {}; if (!(k in state.shown)) state.shown[k] = v; });
   ['sets', 'likes', 'skips', 'playlists', 'bans', 'examples'].forEach(k => {
     if (!Array.isArray(d[k])) return;
-    const idk = x => x.id != null ? 'id' + x.id : x.releaseId != null ? 'r' + x.releaseId : key(x);
+    // example tracks are the same example when type + artist + title match (their "failed" flag may differ)
+    const idk = x => k === 'examples' && x && x.type && x.artist ? 'ex' + x.type + '|' + exKey(x) : x.id != null ? 'id' + x.id : x.releaseId != null ? 'r' + x.releaseId : key(x);
     const have = new Set((state[k] || []).map(idk));
     d[k].forEach(x => { if (!have.has(idk(x))){ state[k].push(x); added++; } });
   });
@@ -443,6 +459,11 @@ function mergeData(d){
   state.energy = Object.assign({}, d.energy || {}, state.energy);
   state.types = Object.assign({}, d.types || {}, state.types);
   if (!state.target && d.target) state.target = d.target;
+  // house profile and its bookkeeping
+  if (!state.hp && d.hp && Array.isArray(d.hp.tracks)){ state.hp = d.hp; added += d.hp.tracks.length; if (HOUSE){ hpSyncTypes(); hpKeyMap = null; } }
+  if (Array.isArray(d.hpLog)){ state.hpLog = state.hpLog || []; const have = new Set(state.hpLog.map(l => l.ts + l.veld + l.track_id)); d.hpLog.forEach(l => { if (!have.has(l.ts + l.veld + l.track_id)) state.hpLog.push(l); }); }
+  ['hpHand', 'hpLabelsOff', 'hpTried'].forEach(k => { if (d[k] && typeof d[k] === 'object') state[k] = Object.assign({}, d[k], state[k] || {}); });
+  if (d.hpButtonsEdited && !state.hpButtonsEdited) state.hpButtonsEdited = true;
   ['token', 'ytKey', 'spClient', 'playerPref'].forEach(k => { if (!state[k] && d[k]) state[k] = d[k]; });
   return added;
 }
@@ -725,6 +746,16 @@ function buildProfile(T){
   state.sets.forEach(set => set.tracks.forEach(t => { if (t.item){ add(t.item, tw(t.item)); markSeen(P, t.item); } }));
   state.likes.forEach(l => { add(l, 1.5); markSeen(P, l); });
   plTracksAll().forEach(t => { add(t, 1.2); markSeen(P, t); });
+  if (HOUSE && state.hp){
+    // house: your profile tracks are the seeds (the ones you confirmed count a bit more); doubtful ones only count as "already known"
+    state.hp.tracks.forEach(t => { const it = hpItem(t); if (hpValid(t)) add(it, t.door_gebruiker_bevestigd ? 1.5 : 1); markSeen(P, it); });
+    const off = state.hpLabelsOff || {};
+    Object.keys((state.hp.ontdekking || {}).labels || {}).forEach(l => {
+      const name = hpLabelName(l), k = lk(name);
+      if (off[l]){ delete P.labels[k]; return; }
+      P.labels[k] = Math.max(P.labels[k] || 0, 1); if (!P.labelIds[k]) P.labelIds[k] = {name};
+    });
+  }
   state.skips.forEach(s => markSeen(P, s));
   P.skipArtists = new Set(state.skips.flatMap(s => (s.artists || []).map(a => norm(a.name))));
   P.banArtists = new Set((state.bans || []).flatMap(b => (b.artists || []).map(a => norm(a.name))));
@@ -816,11 +847,12 @@ function scoreCand(c, P, opts){
   const ref = P.fanRef || 8000, ratio = fans / ref;
   const big = !fans ? 1 : ratio > 8 ? 0.2 : ratio > 4 ? 0.4 : ratio > 2 ? 0.65 : ratio < 0.5 ? 1.15 : 1;
   const hit = c.rank > 600000 ? 0.55 : c.rank > 400000 ? 0.8 : 1;
-  if (opts.popMode === 'gems'){ score *= big * hit; if (ratio > 4) why.push(['Grote artiest', null]); }
-  else if (opts.popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
+  const popMode = HOUSE && opts.popMode === 'classics' ? 'gems' : opts.popMode;
+  if (popMode === 'gems'){ score *= big * hit; if (ratio > 4) why.push(['Grote artiest', null]); }
+  else if (popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
   else score *= Math.sqrt(big * hit);
   if (P.banArtists && c.artists.some(a => P.banArtists.has(norm(a.name)))) score = 0;
-  if (opts.popMode !== 'classics' && c.artists.some(a => TOO_BIG.has(norm(a.name)))) score = 0;
+  if (popMode !== 'classics' && c.artists.some(a => TOO_BIG.has(norm(a.name)))) score = 0;
   // artists you've already been shown a lot: each earlier round counts
   if (!opts.noShown){ const sa = Math.max(0, ...c.artists.map(a => (state.shownArtists || {})[norm(a.name)] || 0)); if (sa) score *= Math.pow(0.6, Math.min(sa, 5)); }
   { const bt = c.artists.map(a => P.related && P.related[norm(a.name)]).find(r => r && r.boost); if (bt) why.unshift(['Tip: ' + bt.boost, null]); }
@@ -988,12 +1020,12 @@ async function generateRecs(){
   const prog = makeProg('#genProg', '#genMsg');
   {
     // listen to your set tracks first (only once, it's remembered), so we know your sound
-    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
+    const seeds = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll(), hpItems());
     const todo = seeds.filter(c => { const h = state.energy[enKey(c)], t = state.types[enKey(c)]; return !h || !t || (!h.ft && !h.partial && !(t.tried && Date.now() - t.tried < 7 * 864e5)); }).slice(0, 150);
     if (todo.length) await measureMany(todo, (d, n) => prog(0.1 * d / n, `Je sets beluisteren om je sound te leren ${d}/${n} (alleen de eerste keer)…`));
   }
   const P = prepProfile(buildProfile(steer ? T : null));
-  if (!P.n) throw new Error('Nog geen gevonden tracks in je sets.');
+  if (!P.n) throw new Error(HOUSE ? 'Importeer eerst je house-profiel (tab House-profiel).' : 'Nog geen gevonden tracks in je sets.');
   const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 4, capArtist: 1, limit: 200,
     sectionLimit: {related: 120, label: 50, known: 10}};
   const topLabels = topN(P.labels, 15).map(([k]) => k);
@@ -1028,9 +1060,9 @@ async function generateRecs(){
   await measureMany(listen, (d, n) => prog(0.65 + 0.35 * d / n, `Kandidaten beluisteren${steer ? ' op ' + describeTarget(T) : ' op je sound'} ${d}/${n}…`));
   let fits = 0, dropped = 0;
   recs.forEach(c => {
-    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []};
-    c.sound = m.f; c.fit = r.f; c.fitWhy = r.why;
-    c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f;
+    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []}, h = hpFit(c);
+    c.sound = m.f; c.fit = r.f; c.fitWhy = h.why ? r.why.concat(h.why) : r.why;
+    c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f * h.f;
     if (r.f >= 1.2) fits++;
   });
   // unmeasured tracks below the listened ones would stay unchecked: only keep them if there's room
@@ -1322,7 +1354,9 @@ function refreshBadges(key){
   document.querySelectorAll('.bpmc[data-bk]').forEach(b => {
     if (key && b.dataset.bk !== key) return;
     const e = state.energy[b.dataset.bk]; if (!e) return;
-    const m = e.bpm || (/(\d+) BPM/.exec(e.why || '') || [])[1]; if (m) b.textContent = m;
+    const m = e.bpm || (/(\d+) BPM/.exec(e.why || '') || [])[1];
+    if (HOUSE) b.innerHTML = bpmKeyHTMLk(m || '–', b.dataset.bk);
+    else if (m) b.textContent = m;
   });
 }
 // click a badge: pick 1-5 by where you click on the bars (or cycle on the number)
@@ -1395,7 +1429,8 @@ function audioFeatures(ab){
   let change = 0;
   for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) change = Math.max(change, Math.abs(S[i].db - S[j].db) + 20 * Math.abs(S[i].lo - S[j].lo) + 40 * Math.abs(S[i].hi - S[j].hi));
   const r2 = x => Math.round(x * 1000) / 1000;
-  return {db: r2(db), lowShare: r2(Math.sqrt(sLow / sAll)), highShare: r2(Math.sqrt(sHigh / sAll)), onsetRate: r2(onsetRate), bpm: bestLag, crest: r2(20 * Math.log10(p90 / p10)),
+  const key = HOUSE ? detectKey(ab) : null;
+  return {key, db: r2(db), lowShare: r2(Math.sqrt(sLow / sAll)), highShare: r2(Math.sqrt(sHigh / sAll)), onsetRate: r2(onsetRate), bpm: bestLag, crest: r2(20 * Math.log10(p90 / p10)),
     periodicity: r2(periodicity), fourFloor: r2(fourFloor), echo: r2(echo), sparsity: r2(sparsity), change: r2(change)};
 }
 function energyFrom(f, meta){
@@ -1413,10 +1448,12 @@ function energyFrom(f, meta){
   const w = parts.reduce((a, p) => a + p[0], 0);
   const raw = parts.reduce((a, p) => a + p[0] * p[1], 0) / w;
   const ft = f ? {lo: f.lowShare, hi: f.highShare, on: f.onsetRate, db: f.db, per: f.periodicity, sp: f.sparsity, ff: f.fourFloor, ec: f.echo, cr: f.crest, ch: f.change} : null;
-  return {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f, bpm: bpm ? Math.round(bpm) : 0, ft};
+  const out = {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f, bpm: bpm ? Math.round(bpm) : 0, ft};
+  if (f && f.key) out.key = f.key;
+  return out;
 }
 /* ================= Track type ================= */
-const TYPES = [['minimal', 'Filler/minimal'], ['hypnotic', 'Hypnotic'], ['tool', 'Tool'], ['ambient', 'Ambient'], ['deep', 'Deep'], ['dub', 'Dub'], ['broken', 'Breaky']];
+const TYPES = HOUSE ? hpTypeList() : [['minimal', 'Filler/minimal'], ['hypnotic', 'Hypnotic'], ['tool', 'Tool'], ['ambient', 'Ambient'], ['deep', 'Deep'], ['dub', 'Dub'], ['broken', 'Breaky']];
 const typeName = k => (TYPES.find(t => t[0] === k) || [k, k])[1];
 const STYLE_HINTS = {
   minimal: ['Minimal', 'Minimal Techno', 'Microhouse'], ambient: ['Ambient', 'Ambient Techno', 'Drone', 'Downtempo', 'Experimental'],
@@ -1444,6 +1481,271 @@ function typesFrom(f, styles){
 }
 function typesOf(c){ const t = state.types[enKey(c)]; return t ? t.tags : null; }
 
+/* ================= House profile (house tool only) =================
+   Your house sound profile (house_soundprofiel.json, schema 1.0) lives in state.hp, in exactly the file's format.
+   Quick tags (the buttons) come from hp.quick_tags and are derived with each button's "regel".
+   Your own changes: bron_tags "gebruiker" + door_gebruiker_bevestigd true, never overwritten by an import.
+   Extra bookkeeping (log, hand-set buttons, labels switched off) sits next to it, so the export stays the same format. */
+function hpTypeList(){ return HOUSE && state.hp ? state.hp.quick_tags.map(q => [q.id, String(q.label || q.id).replace(/^\+/, '')]) : []; }
+function hpSyncTypes(){ TYPES.splice(0, TYPES.length, ...hpTypeList()); }
+const hpValid = t => t.hoofdgenre !== 'onbekend' && !(t.meta || []).includes('id-twijfel');
+const hpQ = id => (state.hp && state.hp.quick_tags || []).find(q => q.id === id);
+const hpLabelName = s => String(s || '').replace(/\s*\([^)]*\)/g, '').trim();
+const HP_LIST_FIELDS = ['stijlen', 'klank', 'functie', 'meta'];
+// which taxonomy tags may go in which field (meta has wildcards like era-*)
+function hpGroups(field){
+  const tags = (state.hp && state.hp.taxonomie.tags) || [];
+  const pre = {stijlen: 'stijl-', klank: 'klank-', functie: 'functie', meta: 'meta', hoofdgenre: 'hoofdgenre'}[field];
+  return tags.filter(t => String(t.groep).startsWith(pre)).map(t => t.tag);
+}
+function hpTagOk(field, tag){
+  const list = hpGroups(field);
+  return list.includes(tag) || list.some(p => p.endsWith('*') && tag.startsWith(p.slice(0, -1)));
+}
+const hpAnyTagOk = tag => HP_LIST_FIELDS.some(f => hpTagOk(f, tag));
+// does a track meet a button's rule?
+function hpRuleHit(rule, t){
+  const has = (list, vals) => (vals || []).some(v => (list || []).includes(v));
+  return has(t.stijlen, rule.stijlen) || has(t.klank, rule.klank) || has(t.meta, rule.meta) || has(t.functie, rule.functie)
+    || (t.hoofdgenre === 'house' && has(t.klank, rule.klank_alleen_bij_house));
+}
+const hpQuickFor = t => (state.hp ? state.hp.quick_tags : []).filter(q => hpRuleHit(q.regel || {}, t)).map(q => q.id);
+// recalculate the buttons of every track you didn't change yourself
+function hpRecompute(){
+  let n = 0;
+  state.hp.tracks.forEach(t => {
+    if (t.door_gebruiker_bevestigd || t.bron_tags === 'gebruiker') return;
+    const q = hpQuickFor(t);
+    if (q.join() !== (t.quick_tags || []).join()){ t.quick_tags = q; n++; }
+  });
+  hpSyncTypes(); hpKeyMap = null;
+  return n;
+}
+function hpLog(t, veld, van, naar){
+  state.hpLog = state.hpLog || [];
+  state.hpLog.push({ts: new Date().toISOString(), track_id: t ? t.track_id : null, track: t ? t.artiesten + ' – ' + t.titel : null, veld, van, naar});
+  if (state.hpLog.length > 3000) state.hpLog.splice(0, state.hpLog.length - 3000);
+}
+const hpMine = t => { t.bron_tags = 'gebruiker'; t.door_gebruiker_bevestigd = true; };
+// change one list field of a track by hand
+function hpSetField(t, field, next){
+  const prev = (t[field] || []).slice();
+  if (prev.join('|') === next.join('|')) return;
+  t[field] = next; hpMine(t); hpLog(t, field, prev, next);
+  // a changed style/sound also moves the buttons, unless you set the buttons of this track yourself
+  if (field !== 'quick_tags' && !(state.hpHand || {})[t.track_id]){
+    const q = hpQuickFor(t);
+    if (q.join() !== (t.quick_tags || []).join()){ hpLog(t, 'quick_tags', t.quick_tags || [], q); t.quick_tags = q; }
+  }
+  if (field === 'quick_tags'){ state.hpHand = state.hpHand || {}; state.hpHand[t.track_id] = true; }
+  hpKeyMap = null; save();
+}
+// the key that identifies a track: track_id, or title + artist + version
+const hpId = t => t.track_id || ('k:' + norm(t.titel) + '|' + norm(t.artiesten) + '|' + norm(t.versie || ''));
+const HP_TOP = ['schema_versie', 'quick_tags', 'taxonomie', 'tracks'];
+const HP_TRACK = ['titel', 'artiesten', 'hoofdgenre', 'stijlen', 'klank', 'functie', 'meta', 'quick_tags', 'zekerheid', 'bron_tags', 'door_gebruiker_bevestigd'];
+function hpImport(d){
+  if (!d || typeof d !== 'object') throw new Error('Dit is geen JSON-object.');
+  const miss = HP_TOP.filter(k => !(k in d));
+  if (miss.length) throw new Error('Veld ontbreekt in het bestand: ' + miss.join(', ') + '.');
+  if (String(d.schema_versie) !== '1.0') throw new Error('Schema-versie ' + d.schema_versie + ' wordt niet ondersteund (verwacht 1.0).');
+  if (!Array.isArray(d.tracks) || !Array.isArray(d.quick_tags)) throw new Error('"tracks" en "quick_tags" moeten lijsten zijn.');
+  if (!Array.isArray((d.taxonomie || {}).tags)) throw new Error('Veld ontbreekt: taxonomie.tags.');
+  d.tracks.forEach((t, i) => {
+    const m = HP_TRACK.filter(k => !(k in t));
+    if (m.length) throw new Error(`Track ${t.track_id || '#' + (i + 1)} (${t.titel || '?'}): veld ontbreekt: ${m.join(', ')}.`);
+  });
+  d.quick_tags.forEach((q, i) => { const m = ['id', 'label', 'regel'].filter(k => !(k in q)); if (m.length) throw new Error(`Knop ${q.id || '#' + (i + 1)}: veld ontbreekt: ${m.join(', ')}.`); });
+  const first = !state.hp;
+  const res = {nieuw: 0, bijgewerkt: 0, beschermd: 0};
+  if (first){
+    state.hp = JSON.parse(JSON.stringify(d));
+    res.nieuw = d.tracks.length;
+  } else {
+    const hp = state.hp, byId = new Map(hp.tracks.map((t, i) => [hpId(t), i]));
+    ['schema', 'schema_versie', 'aangemaakt', 'profiel', 'taxonomie', 'ontdekking'].forEach(k => { if (k in d) hp[k] = d[k]; });
+    // buttons you edited yourself stay; otherwise the file's buttons are taken over
+    if (!state.hpButtonsEdited) hp.quick_tags = d.quick_tags;
+    d.tracks.forEach(t => {
+      const i = byId.get(hpId(t));
+      if (i == null){ hp.tracks.push(t); res.nieuw++; return; }
+      const old = hp.tracks[i];
+      if (old.door_gebruiker_bevestigd || old.bron_tags === 'gebruiker'){ res.beschermd++; return; }
+      hp.tracks[i] = t; res.bijgewerkt++;
+    });
+    if (state.hpButtonsEdited) hpRecompute();
+  }
+  hpLog(null, 'import', null, `${res.nieuw} nieuw, ${res.bijgewerkt} bijgewerkt, ${res.beschermd} door jou bevestigd en niet overschreven`);
+  hpSyncTypes(); hpKeyMap = null; save();
+  return res;
+}
+function hpExport(){ return JSON.stringify(state.hp, null, 2); }
+function download(name, text, type){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type: type || 'application/json'})); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+// profile tracks as items for the recommender (artists, label, year)
+function hpItem(t){
+  return {artists: splitArtists(t.artiesten || '').map(n => ({name: n})), title: t.titel + (t.versie ? ' (' + t.versie + ')' : ''), releaseTitle: t.titel,
+    labels: t.label ? [{name: hpLabelName(t.label)}] : [], styles: [], year: +t.jaar || null, hpId: t.track_id};
+}
+function hpItems(all){ return HOUSE && state.hp ? state.hp.tracks.filter(t => all || hpValid(t)).map(hpItem) : []; }
+let hpKeyMap = null;
+function hpByKey(key){
+  if (!hpKeyMap){ hpKeyMap = new Map(); (state.hp ? state.hp.tracks : []).forEach(t => { const it = hpItem(t); hpKeyMap.set(enKey(it), t); hpKeyMap.set(enKey({artists: it.artists, title: t.titel}), t); }); }
+  return hpKeyMap.get(key);
+}
+// profile tracks as listening examples for the buttons (only the ones that count)
+function hpExamples(){
+  if (!state.hp) return [];
+  return state.hp.tracks.filter(hpValid).flatMap(t => (t.quick_tags || []).map(q => ({type: q, artist: splitArtists(t.artiesten)[0] || '', title: t.titel, bpm: +t.bpm || 0})));
+}
+/* --- new tracks: which taxonomy tags can we say something about? Only existing tags, always zekerheid "laag" ---
+   Discogs style -> your taxonomy style. Tags that don't exist in your taxonomy are skipped. */
+const HP_STYLE_MAP = {
+  'Deep House': 'deep-house', 'Acid House': 'acid-house', 'Garage House': 'garage-house', 'UK Garage': 'uk-garage', 'Speed Garage': 'uk-garage',
+  'Tribal House': 'tribal-house', 'Tribal': 'tribal-house', 'Latin': 'latin-house', 'Afro House': 'afro-house', 'Hip-House': 'hip-house',
+  'Ghetto House': 'ghetto-house', 'Ghettotech': 'ghetto-house', 'Hard House': 'hard-house', 'Balearic': 'balearic', 'Microhouse': 'minimal-house',
+  'Funky House': 'funky-house', 'Nu-Disco': 'disco-house', 'Disco House': 'disco-house', 'Gospel House': 'gospel-house', 'Jackin House': 'jackin-house',
+  'Chicago House': 'chicago-house', 'Organic House': 'organic-house', 'Dub Techno': 'dub-techno', 'Deep Techno': 'deep-techno',
+  'Breakbeat': 'breakbeat', 'Breaks': 'breakbeat', 'Electro': 'electro', 'Bassline': 'uk-bass', 'UK Funky': 'uk-bass',
+  'Progressive Trance': 'progressive-trance', 'Psy-Trance': 'psytrance',
+};
+function hpDerive(c, f){
+  const st = new Set(), kl = new Set(), meta = new Set();
+  const styles = (c && c.styles) || [], y = c && c.year;
+  styles.forEach(s => { if (HP_STYLE_MAP[s]) st.add(HP_STYLE_MAP[s]); });
+  if (styles.includes('Tech House')) st.add(y && y < 2005 ? 'tech-house-klassiek' : 'tech-house-modern');
+  if (styles.includes('Progressive House')) st.add(y && y < 2005 ? 'progressive-house-klassiek' : 'progressive-house-modern');
+  if (styles.includes('Trance') && y && y < 2005) st.add('classic-trance');
+  if (styles.includes('Minimal') && styles.some(s => /House/.test(s))) st.add('minimal-house');
+  if (styles.includes('Vocal') && styles.some(s => /House|Garage/.test(s))) st.add('vocal-house');
+  if (y >= 1970){ const e = 'era-' + String(Math.floor(y / 10) * 10).slice(-2) + 's'; meta.add(e); }
+  const ti = ((c && c.title) || '') + ' ' + ((c && c.releaseTitle) || '');
+  if (/\bdub\b/i.test(ti)) meta.add('versie-dub'); else if (/\b(remix|rmx)\b/i.test(ti)) meta.add('versie-remix'); else if (/\bedit\b/i.test(ti)) meta.add('versie-edit');
+  if (f){ if (f.fourFloor != null && f.fourFloor < 0.18) kl.add('gebroken'); if (f.periodicity >= 0.45 && f.change <= 2) kl.add('hypnotisch'); }
+  const ok = (field, set) => [...set].filter(x => hpTagOk(field, x));
+  const houseSt = new Set(state.hp.taxonomie.tags.filter(t => t.groep === 'stijl-house').map(t => t.tag)), stijlen = ok('stijlen', st);
+  return {hoofdgenre: stijlen.some(x => houseSt.has(x)) ? 'house' : null, stijlen, klank: ok('klank', kl), functie: [], meta: ok('meta', meta)};
+}
+// type (buttons) for a measured track in the house tool
+function hpClassify(key, f, styles, c){
+  const own = hpByKey(key);
+  if (own) return {tags: (own.quick_tags || []).slice(), scores: Object.fromEntries((own.quick_tags || []).map(q => [q, 1])), profile: own.track_id};
+  const der = hpDerive(Object.assign({}, c || {}, {styles: styles || (c && c.styles) || []}), f);
+  const rule = hpQuickFor(der);
+  let knn = null;
+  const e = state.energy[key];
+  if (e && e.ft) knn = knnTypes(Object.assign({}, e.ft, {bpm: e.bpm || 0}), key);
+  const tags = rule.slice();
+  if (knn && knn.tags.length && tags.length < 2) knn.tags.forEach(t => { if (!tags.includes(t) && tags.length < 2) tags.push(t); });
+  const scores = Object.assign({}, knn ? knn.scores : {}); rule.forEach(q => scores[q] = 1);
+  return {tags, scores, ruleTags: rule, derived: der, knn: !!knn};
+}
+// how well a candidate fits the house profile: buttons, styles and tempo. Never popularity.
+function hpStats(){
+  const tr = state.hp.tracks.filter(hpValid), q = {}, s = {};
+  tr.forEach(t => { (t.quick_tags || []).forEach(x => q[x] = (q[x] || 0) + 1); (t.stijlen || []).forEach(x => s[x] = (s[x] || 0) + 1); });
+  const tempo = (state.hp.profiel || {}).tempo || {};
+  const m = /(\d+)\D+(\d+)/.exec(tempo.bereik_betrouwbaar || '');
+  return {n: tr.length, q, s, lo: m ? +m[1] : 120, hi: m ? +m[2] : 135};
+}
+function hpFit(c){
+  if (!HOUSE || !state.hp) return {f: 1, why: null};
+  const H = hpStats(), t = state.types[enKey(c)] || {}, tags = t.tags || [], st = (t.derived || {}).stijlen || [];
+  let f = 1; const why = [];
+  if (tags.length){
+    const share = Math.max(...tags.map(x => (H.q[x] || 0) / Math.max(1, H.n)));
+    f *= 0.75 + Math.min(0.6, share * 3);
+    if (share > 0) why.push(tags.map(typeName).join('/'));
+  } else f *= 0.85;
+  const sh = st.filter(x => H.s[x]);
+  if (sh.length){ f *= 1.15; why.push(sh.join(', ')); }
+  const b = bpmOf(c);
+  if (b){ const ok = x => x >= H.lo - 2 && x <= H.hi + 2; if (!(ok(b) || ok(b * 2) || ok(b / 2))) f *= 0.65; }
+  return {f, why: why.length ? 'Past bij profiel: ' + why.join(' · ') : null};
+}
+/* --- musical key (house tool): chroma from the preview, matched against major/minor key profiles, shown as Camelot --- */
+const PCS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const CAM_MIN = [5, 12, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10], CAM_MAJ = [8, 3, 10, 5, 12, 7, 2, 9, 4, 11, 6, 1];
+const KP_MAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const KP_MIN = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+const camelot = (pc, minor) => (minor ? CAM_MIN[pc] + 'A' : CAM_MAJ[pc] + 'B');
+// "Eb maj", "D# min", "Am", "8A" -> Camelot code
+function toCamelot(s){
+  s = String(s || '').trim(); if (!s) return '';
+  let m = /^(1[0-2]|[1-9])\s*([AB])$/i.exec(s); if (m) return m[1] + m[2].toUpperCase();
+  m = /^([A-G])\s*([#b♯♭]?)\s*(maj(?:or)?|min(?:or)?|m)?$/i.exec(s.replace(/\s+/g, ' '));
+  if (!m) return '';
+  let pc = PCS.indexOf(m[1].toUpperCase()); if (/[#♯]/.test(m[2])) pc++; if (/[b♭]/.test(m[2])) pc--;
+  pc = (pc + 12) % 12;
+  return camelot(pc, /^m(in)?/i.test(m[3] || '') && !/^maj/i.test(m[3] || ''));
+}
+function camelotName(code){
+  const m = /^(\d+)([AB])$/.exec(code || ''); if (!m) return '';
+  const pc = (m[2] === 'A' ? CAM_MIN : CAM_MAJ).indexOf(+m[1]);
+  return PCS[pc].replace('#', '♯') + (m[2] === 'A' ? ' mineur' : ' majeur');
+}
+function fft(re, im){
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++){ let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j){ [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1){
+    const a = -2 * Math.PI / len, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += len){
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++){
+        const p = i + k, q = p + len / 2, tr = re[q] * cr - im[q] * ci, ti = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - tr; im[q] = im[p] - ti; re[p] += tr; im[p] += ti;
+        const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+      }
+    }
+  }
+}
+function detectKey(ab){
+  const sr0 = ab.sampleRate, L = ab.getChannelData(0), R = ab.numberOfChannels > 1 ? ab.getChannelData(1) : L;
+  const dec = Math.max(1, Math.floor(sr0 / 11025)), sr = sr0 / dec, n = Math.floor(L.length / dec);
+  const x = new Float32Array(n);
+  for (let i = 0; i < n; i++){ let s = 0; for (let j = 0; j < dec; j++){ const k = i * dec + j; s += L[k] + R[k]; } x[i] = s / (2 * dec); }
+  const N = 4096, win = new Float32Array(N).map((_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)));
+  const bins = [];
+  for (let b = 1; b < N / 2; b++){ const f = b * sr / N; if (f < 80 || f > 1700) continue; bins.push([b, ((Math.round(12 * Math.log2(f / 440)) + 9) % 12 + 12) % 12]); }
+  const chroma = new Float64Array(12);
+  const s0 = Math.floor(n * 0.05), s1 = Math.floor(n * 0.95) - N;
+  let frames = 0;
+  for (let st = s0; st < s1; st += N / 2){
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = x[st + i] * win[i];
+    fft(re, im);
+    const c = new Float64Array(12); let tot = 0;
+    bins.forEach(([b, pc]) => { const m = Math.sqrt(re[b] * re[b] + im[b] * im[b]); c[pc] += m; tot += m; });
+    if (tot < 1e-6) continue;
+    for (let k = 0; k < 12; k++) chroma[k] += Math.log1p(100 * c[k] / tot);
+    frames++;
+  }
+  if (frames < 8) return null;
+  const corr = (p, sh) => { const mx = chroma.reduce((a, b) => a + b, 0) / 12, mp = p.reduce((a, b) => a + b, 0) / 12; let num = 0, dx = 0, dp = 0;
+    for (let k = 0; k < 12; k++){ const a = chroma[(k + sh) % 12] - mx, b = p[k] - mp; num += a * b; dx += a * a; dp += b * b; } return num / Math.sqrt(dx * dp || 1); };
+  const all = [];
+  for (let pc = 0; pc < 12; pc++){ all.push({pc, minor: false, r: corr(KP_MAJ, pc)}); all.push({pc, minor: true, r: corr(KP_MIN, pc)}); }
+  all.sort((a, b) => b.r - a.r);
+  const best = all[0], gap = best.r - all[1].r;
+  return {cam: camelot(best.pc, best.minor), r: Math.round(best.r * 100) / 100, sure: best.r > 0.6 && gap > 0.05 ? 'midden' : 'laag'};
+}
+// key of a track: from your profile (toonsoort) or measured from the preview
+function keyOf(c){ return keyOfK(enKey(c)); }
+function keyOfK(ek){
+  const own = HOUSE && state.hp && hpByKey(ek);
+  if (own && own.toonsoort){ const k = toCamelot(own.toonsoort); if (k) return {cam: k, src: 'profiel'}; }
+  const e = state.energy[ek];
+  return e && e.key ? {cam: e.key.cam, src: 'gemeten', sure: e.key.sure} : null;
+}
+function bpmKeyHTML(c){ return bpmKeyHTMLk(bpmOf(c) || '–', enKey(c)); }
+function bpmKeyHTMLk(b, ek){
+  if (!HOUSE) return String(b);
+  const k = keyOfK(ek);
+  return `${b}<small class="camk" title="${k ? esc(camelotName(k.cam) + (k.src === 'gemeten' ? ' · gemeten uit de preview, zekerheid ' + k.sure : ' · uit je profiel')) : 'Toonsoort nog niet gemeten'}">${k ? esc(k.cam) + (k.src === 'gemeten' && k.sure === 'laag' ? '?' : '') : ''}</small>`;
+}
+
 /* --- learning the types from your own example tracks ---
    Each type is learned from the sound of the example tracks you gave (and every track you tagged yourself),
    never from the artist: a track gets a type only because its audio is close to your examples of that type. */
@@ -1451,11 +1753,12 @@ const DEFAULT_EXAMPLES = [{"type": "minimal", "artist": "Härdstedt, Luigi Tozzi
 const KNN_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff', 'ec', 'cr', 'ch', 'bpm'];
 const exKey = x => enKey({artists: [{name: x.artist.split(',')[0].trim()}], title: x.title});
 let trainCache = null;
+const exampleList = () => HOUSE ? hpExamples().concat(state.examples || []) : (state.examples || []);
 function trainingSet(){
   if (trainCache) return trainCache;
   const rows = [];
   const vec = (key, bpm) => { const e = state.energy[key]; if (!e || !e.ft) return null; return Object.assign({}, e.ft, {bpm: bpm || e.bpm || 0}); };
-  (state.examples || []).forEach(x => { const v = vec(exKey(x), x.bpm); if (v) rows.push({type: x.type, v, key: exKey(x)}); });
+  exampleList().forEach(x => { const v = vec(exKey(x), x.bpm); if (v) rows.push({type: x.type, v, key: exKey(x)}); });
   Object.entries(state.types).forEach(([k, t]) => { if (!t.manual) return; const v = vec(k); if (v) t.tags.forEach(type => rows.push({type, v, key: k})); });
   // scale: spread of each feature over all measured tracks
   const all = Object.values(state.energy).filter(e => e.ft).map(e => Object.assign({}, e.ft, {bpm: e.bpm || 0}));
@@ -1482,7 +1785,8 @@ function knnTypes(v, selfKey){
   const scores = {}; ranked.forEach(([t, d]) => scores[t] = Math.round(100 / (1 + d)) / 100);
   return {tags, scores, knn: true};
 }
-function classifyTrack(key, f, styles){
+function classifyTrack(key, f, styles, c){
+  if (HOUSE) return hpClassify(key, f, styles, c);
   const e = state.energy[key];
   if (e && e.ft){ const r = knnTypes(Object.assign({}, e.ft, {bpm: e.bpm || 0}), key); if (r) return r; }
   return typesFrom(f, styles);
@@ -1494,6 +1798,7 @@ function reclassifyAll(){
   Object.keys(state.energy).forEach(k => {
     const t = state.types[k]; if (t && t.manual) return;
     const e = state.energy[k]; if (!e.ft) return;
+    if (HOUSE){ if (t && t.profile) return; const r = hpClassify(k, null, [], null); if (t && t.derived){ const rule = hpQuickFor(t.derived); r.tags = rule.concat(r.tags.filter(x => !rule.includes(x))).slice(0, Math.max(2, rule.length)); r.ruleTags = rule; r.derived = t.derived; } state.types[k] = Object.assign({}, t || {}, r, {audio: true, tried: (t && t.tried) || Date.now()}); n++; return; }
     const r = knnTypes(Object.assign({}, e.ft, {bpm: e.bpm || 0}), k); if (!r) return;
     state.types[k] = Object.assign({}, t || {}, r, {audio: true, tried: (t && t.tried) || Date.now()}); n++;
   });
@@ -1505,12 +1810,19 @@ let exBusy = false;
 async function measureExamples(force){
   if (exBusy) return; exBusy = true;
   try {
-    const todo = (state.examples || []).filter(x => { const e = state.energy[exKey(x)]; return force || !e || !e.ft; }).filter(x => !x.failed || force);
+    let todo = (state.examples || []).filter(x => { const e = state.energy[exKey(x)]; return force || !e || !e.ft; }).filter(x => !x.failed || force);
+    if (HOUSE){
+      // house: your profile tracks are the examples (each once), not retried for a week when not found
+      state.hpTried = state.hpTried || {};
+      const seen = new Set();
+      todo = todo.concat(hpExamples().filter(x => { const k = exKey(x); if (seen.has(k)) return false; seen.add(k); const e = state.energy[k];
+        return force || ((!e || !e.ft || !e.key) && !(state.hpTried[k] > Date.now() - 7 * 864e5)); }));
+    }
     if (todo.length){
       exMsg(`Voorbeelden beluisteren 0/${todo.length}…`);
       const items = todo.map(x => ({x, it: {artists: x.artist.split(',').map(n => ({name: n.trim()})), title: x.title, styles: []}}));
       await measureMany(items.map(o => o.it), (d, n) => exMsg(`Voorbeelden beluisteren ${d}/${n}…`));
-      items.forEach(({x}) => { const e = state.energy[exKey(x)]; x.failed = !(e && e.ft); if (e && x.bpm) e.bpm = x.bpm; });
+      items.forEach(({x}) => { const e = state.energy[exKey(x)]; x.failed = !(e && e.ft); if (e && x.bpm) e.bpm = x.bpm; if (HOUSE) state.hpTried[exKey(x)] = Date.now(); });
     }
     const n = reclassifyAll();
     renderExamples();
@@ -1522,7 +1834,7 @@ function renderExamples(){
   const box = $('#exList'); if (!box) return;
   const T = trainingSet();
   box.innerHTML = TYPES.map(([k, n]) => {
-    const list = (state.examples || []).filter(x => x.type === k);
+    const list = exampleList().filter(x => x.type === k).slice(0, 12);
     const own = Object.values(state.types).filter(t => t.manual && t.tags.includes(k)).length;
     return `<div style="margin:6px 0"><b>${esc(n)}</b> <span class="muted small">${T.per[k] || 0} bruikbaar${own ? ` (waarvan ${own} zelf getagd)` : ''}${(T.per[k] || 0) < 2 ? ' · nog te weinig, minimaal 2' : ''}</span>
       <div class="small muted">${list.map(x => `${esc(x.artist)} – ${esc(x.title)}${x.failed ? ' <span class="bad">(niet gevonden)</span>' : ''}`).join(' · ')}</div></div>`;
@@ -1613,7 +1925,8 @@ async function measureEnergy(c){
   const have = state.energy[key], haveT = state.types[key];
   const recentTry = haveT && haveT.tried && Date.now() - haveT.tried < 7 * 864e5;
   const oldFormat = have && !have.manual && !have.partial && !have.ft && !recentTry;
-  if (!oldFormat && have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
+  const needKey = HOUSE && have && !have.key && !have.keyTried;
+  if (!needKey && !oldFormat && have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
   const artist = c.artists.map(a => a.name).join(', '), title = c.source === 'deezer' || c.trackFound ? c.title : c.title || c.releaseTitle;
   let meta = {}, preview = c.preview;
   try {
@@ -1625,10 +1938,11 @@ async function measureEnergy(c){
   if (preview){ try { f = audioFeatures(await decodeUrl(preview)); } catch(e){} }
   const r = energyFrom(f, meta);
   if (r && !(have && have.manual)) state.energy[key] = r;
-  else if (r && have && have.manual){ have.bpm = r.bpm; have.ft = r.ft; }
+  else if (r && have && have.manual){ have.bpm = r.bpm; have.ft = r.ft; if (r.key) have.key = r.key; }
+  if (HOUSE && state.energy[key]) state.energy[key].keyTried = true;
   if (!(haveT && haveT.manual)){
     trainCache = null;
-    const t = classifyTrack(key, f, c.styles);
+    const t = classifyTrack(key, f, c.styles, c);
     state.types[key] = Object.assign(t, {audio: !!f, tried: Date.now()});
   }
   save();
@@ -1639,7 +1953,7 @@ const enQueued = new Set();
 function queueEnergy(list){
   list.forEach(c => { if (!c) return; const k = enKey(c), h = state.energy[k], t = state.types[k];
     const recent = t && t.tried && Date.now() - t.tried < 7 * 864e5;
-    const needE = !h || (h.partial && !h.manual && !recent), needT = !t || (!t.manual && !t.audio && !recent);
+    const needE = !h || (h.partial && !h.manual && !recent) || (HOUSE && !h.key && !h.keyTried), needT = !t || (!t.manual && !t.audio && !recent);
     if ((needE || needT) && !enQueued.has(k)){ enQueued.add(k); enQueue.push(c); } });
   runEnergy();
 }
@@ -2212,6 +2526,7 @@ function showTab(t){
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
   $('#sideFilters').style.display = t === 'recs' ? '' : 'none';
   if (t === 'profile') renderProfile();
+  if (t === 'house') renderHouse();
   if (t === 'likes') renderLikes();
   if (t === 'playlists') renderPlaylists();
   if (t === 'sets'){ renderSets(); queueEnergy(state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean)); }
@@ -2233,7 +2548,7 @@ function recHTML(c, i, ctx){
       ${img}
       <button class="tcell" data-act="details" aria-expanded="false" title="Details"><span class="t">${title}</span><span class="a">${sub}</span></button>
       <span class="lbl" title="${lab}">${lab || '–'}</span>
-      <span class="bpmc" data-bk="${esc(enKey(c))}">${bpmOf(c) || '–'}</span>
+      <span class="bpmc" data-bk="${esc(enKey(c))}">${bpmKeyHTML(c)}</span>
       <span class="enc">${enBadge(c)}</span>
       <span class="tyc">${typeChips(c)}</span>
       <span class="score">${c.score != null ? Math.round(c.score * 100) : ''}</span>
@@ -2324,7 +2639,7 @@ function target(){
 const hasTarget = T => T.types.length || T.lo > 1 || T.hi < 5;
 function renderTypeChips(){
   const T = state.target || {types: []};
-  $('#typeChips').innerHTML = TYPES.map(([k, n]) => `<button class="tchip${(T.types || []).includes(k) ? ' on' : ''}" data-tchip="${k}">${n}</button>`).join('');
+  $('#typeChips').innerHTML = TYPES.map(([k, n]) => `<button class="tchip${(T.types || []).includes(k) ? ' on' : ''}" data-tchip="${k}"${HOUSE ? ` title="${esc(hpButtonTitle(hpQ(k)))}"` : ''}>${n}</button>`).join('');
 }
 $('#typeChips').addEventListener('click', e => {
   const b = e.target.closest('[data-tchip]'); if (!b) return;
@@ -2347,7 +2662,7 @@ function fitOf(c, T){
   if (T.types.length){
     const sc = (state.types[enKey(c)] || {}).scores;
     if (!ty) f *= 0.8;
-    else if (ty.some(x => T.types.includes(x))){ f *= 1.4; why.push(ty.filter(x => T.types.includes(x)).map(typeName).join('/')); }
+    else if (ty.some(x => T.types.includes(x))){ f *= HOUSE ? 1.25 + 0.15 * ty.filter(x => T.types.includes(x)).length : 1.4; why.push(ty.filter(x => T.types.includes(x)).map(typeName).join('/')); }
     else if (sc){
       // how high does the goal type rank for this track?
       const order = Object.entries(sc).sort((a, b) => b[1] - a[1]).map(([k]) => k);
@@ -2367,7 +2682,7 @@ const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.leng
 const bpmOf = c => { const e = state.energy[enKey(c)]; if (!e) return 0; if (e.bpm) return e.bpm; const m = /(\d+) BPM/.exec(e.why || ''); return m ? +m[1] : 0; };
 const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff'];
 function soundProfile(only){
-  const items = only || state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll());
+  const items = only || state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll(), hpItems());
   const bpms = [], fts = [], types = {};
   let nt = 0;
   items.forEach(c => {
@@ -2542,7 +2857,8 @@ function recGroups(){
 }
 function renderPushBar(){
   $('#pushBar').innerHTML = '<span class="small muted">Meer van één soort:</span>' + TYPES.map(([k, n]) =>
-    `<button class="pushb${pushBusy === k ? ' busy' : ''}" data-push="${k}" title="Zoek breder en haal tot ${PUSH_N} ${esc(n)}-tracks op">${pushBusy === k ? 'Stop ' + esc(n) : '+' + esc(n)}</button>`).join('');
+    `<button class="pushb${pushBusy === k ? ' busy' : ''}" data-push="${k}" title="${HOUSE ? esc(hpButtonTitle(hpQ(k))) : `Zoek breder en haal tot ${PUSH_N} ${esc(n)}-tracks op`}">${pushBusy === k ? 'Stop ' + esc(n) : '+' + esc(n)}</button>`).join('')
+    + (HOUSE ? (state.hp ? hpExplainHTML() : '<span class="small muted">Importeer eerst je house-profiel bij <b>House-profiel</b>, dan verschijnen hier je knoppen.</span>') : '');
 }
 function renderRecs(){
   renderPushBar();
@@ -2597,7 +2913,7 @@ async function pushType(k){
     const boost = await addBoostSeeds(P);
     if (stopped()) return;
     // wider than a normal round: more labels and artists, more tracks per artist, and earlier shown tracks may return
-    const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 15, capArtist: 4, limit: 500, noShown: true};
+    const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 15, capArtist: HOUSE ? 2 : 4, limit: 500, noShown: true};
     const cands = (await gatherAndRank(P, deezerJobs(P, 25, 15, 150, 10, 25).concat(boost), opts, (f, l) => prog(0.1 + 0.3 * f, `+${name}: ${l}…`))).filter(c => c.score > 0);
     const exact = [], near = [], rest = [];
     const fitsE = c => { const e = energyOf(c); return !e || (e >= lo && e <= hi); };
@@ -3175,6 +3491,8 @@ $('#exPasteBtn').onclick = () => {
 };
 $('#exRetrain').onclick = () => measureExamples(true);
 // your examples (sent on 7 Nov) are added once per batch
+// clean up duplicate example tracks that older versions could create when restoring a backup (same type + track = one example)
+{ const seen = new Set(), ex = state.examples || []; const kept = ex.filter(x => { const k = x && x.type && x.artist ? x.type + '|' + exKey(x) : JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; }); if (kept.length < ex.length){ state.examples = kept; save(); } }
 if (VARIANT.seeds && (state.examplesSeeded || 0) < 2){ state.examples = (state.examples || []).concat(DEFAULT_EXAMPLES.filter(x => !(state.examples || []).some(y => exKey(y) === exKey(x) && y.type === x.type))); state.examplesSeeded = 2; save(); }
 renderExamples();
 setTimeout(() => measureExamples(), 2500);
@@ -3393,6 +3711,199 @@ $('#importFile').onchange = async e => {
 $('#clearCache').onclick = async () => { await idb.clear(); alert('Cache geleegd.'); };
 $('#clearSkips').onclick = () => { if (!confirm('Skips, "Niet mijn sound" en eerder getoonde tracks resetten?')) return; state.skips = []; state.bans = []; state.shown = {}; state.shownArtists = {}; save(); alert('Gereset.'); };
 
+
+/* ================= House profile screen (house tool only) ================= */
+const hpView = {q: '', knop: '', zek: '', open: false, edit: null};
+const ZEK_CLS = {hoog: 'ok', midden: 'warn', laag: 'bad'};
+const zekHTML = (n, v) => `<span class="chip hpz ${ZEK_CLS[v] || ''}" title="Zekerheid ${n}">${n}: ${esc(v || '—')}</span>`;
+function hpButtonTitle(q){
+  if (!q) return '';
+  const ex = (q.voorbeelden || []).slice(0, 2).map(v => v.artiesten + ' – ' + v.titel).join('; ');
+  return (q.betekenis || '') + (q.techno_vergelijking ? '\n' + q.techno_vergelijking : '') + (ex ? '\nBijv.: ' + ex : '');
+}
+function hpExplainHTML(){
+  if (!state.hp) return '';
+  return `<details class="hpx"><summary class="small muted">Wat betekenen de knoppen?</summary><div class="hpxl">${state.hp.quick_tags.map(q => `
+    <div><b>${esc(q.label)}</b> <span class="small">${esc(q.betekenis || '')}</span>
+    ${q.techno_vergelijking ? `<div class="small muted">${esc(q.techno_vergelijking)}</div>` : ''}
+    <div class="small muted">${(q.voorbeelden || []).slice(0, 2).map(v => v.link ? `<a href="${esc(v.link)}" target="_blank" rel="noopener">${esc(v.artiesten + ' – ' + v.titel)}</a>` : esc(v.artiesten + ' – ' + v.titel)).join(' · ')}${q.klassieker && q.klassieker !== '—' ? ` · klassieker: ${esc(q.klassieker)}` : ''}</div></div>`).join('')}</div></details>`;
+}
+function hpRuleText(r){
+  return Object.entries(r || {}).filter(([, v]) => v && v.length).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v.join(', ')}`).join(' · ') || 'geen regel';
+}
+function renderHouse(){
+  const box = $('#houseView'); if (!box) return;
+  const hp = state.hp;
+  const head = `<div class="card"><h2 style="margin-top:0">House-profiel</h2>
+    <div class="row"><label class="btn primary" style="cursor:pointer">Importeer profiel (.json)<input type="file" id="hpFile" accept=".json,application/json" hidden></label>
+    ${hp ? '<button class="btn" id="hpExport">Exporteer profiel</button><button class="btn" id="hpExportLog">Exporteer wijzigingslog</button>' : ''}<span class="small" id="hpMsg"></span></div>
+    <p class="small muted" style="margin:8px 0 0">Een nieuwe import werkt tracks bij op track_id. Tracks die jij hebt aangepast of bevestigd worden nooit overschreven.</p></div>`;
+  if (!hp){ box.innerHTML = head + '<div class="empty">Nog geen house-profiel. Importeer house_soundprofiel.json.</div>'; return; }
+  const H = hpStats(), all = hp.tracks, mine = all.filter(t => t.door_gebruiker_bevestigd).length;
+  const genres = {}; all.filter(hpValid).forEach(t => genres[t.hoofdgenre] = (genres[t.hoofdgenre] || 0) + 1);
+  const stats = `<div class="card"><h3 style="margin-top:0">Wat telt mee</h3>
+    <div class="small">${all.length} tracks · <b>${H.n}</b> tellen mee in je profiel · ${all.length - H.n} niet (onbekend genre of id-twijfel), wel zichtbaar · ${mine} door jou bevestigd</div>
+    <div class="small muted" style="margin-top:6px">Genres: ${Object.entries(genres).sort((a, b) => b[1] - a[1]).map(([g, n]) => `${esc(g)} ${Math.round(100 * n / H.n)}%`).join(' · ')}</div>
+    <div class="small muted">Knoppen: ${hp.quick_tags.map(q => `${esc(q.label)} ${H.q[q.id] || 0}`).join(' · ')}</div></div>`;
+  // buttons: rename, rule, order, remove, add
+  const btns = `<div class="card"><details${hpView.open ? ' open' : ''} id="hpBtnBox"><summary><b>Knoppen beheren</b> <span class="small muted">${hp.quick_tags.length} knoppen · na een wijziging worden de knoppen van alle tracks opnieuw berekend, behalve bij tracks die jij hebt aangepast</span></summary>
+    ${hp.quick_tags.map((q, i) => hpView.edit === q.id ? `<div class="hpb edit" data-qi="${i}">
+      <label class="small">Label <input data-qf="label" value="${esc(q.label)}"></label>
+      <label class="small">Betekenis <input data-qf="betekenis" value="${esc(q.betekenis || '')}" placeholder="Wat hoor je bij deze knop?"></label>
+      ${['stijlen', 'klank', 'meta', 'functie', 'klank_alleen_bij_house'].map(f => `<label class="small">${f.replace(/_/g, ' ')} <input data-qf="${f}" value="${esc(((q.regel || {})[f] || []).join(', '))}" placeholder="komma-gescheiden tags uit de taxonomie"></label>`).join('')}
+      <div class="row" style="margin-top:6px"><button class="btn primary small" data-qa="save">Opslaan en herberekenen</button><button class="btn small" data-qa="cancel">Annuleren</button><span class="small bad" id="hpQErr"></span></div></div>`
+      : `<div class="hpb" data-qi="${i}"><b>${esc(q.label)}</b> <span class="small muted">${esc(hpRuleText(q.regel))}</span>
+      <span class="hpba"><button class="btn small" data-qa="up" title="Omhoog">↑</button><button class="btn small" data-qa="down" title="Omlaag">↓</button><button class="btn small" data-qa="edit">Aanpassen</button><button class="btn small" data-qa="del">Verwijderen</button></span>
+      <div class="small muted">${esc(q.betekenis || '')}</div></div>`).join('')}
+    <div class="row" style="margin-top:8px"><input id="hpNewLabel" placeholder="Nieuwe knop, bijv. +Acid" style="max-width:220px"><button class="btn small" id="hpAddBtn">Knop toevoegen</button></div>
+    </details></div>`;
+  // tracks
+  const q = norm(hpView.q);
+  const list = all.filter(t => (!q || norm(t.titel + ' ' + t.artiesten + ' ' + (t.label || '')).includes(q))
+    && (!hpView.knop || (t.quick_tags || []).includes(hpView.knop))
+    && (!hpView.zek || (hpView.zek === 'onbevestigd' ? !t.door_gebruiker_bevestigd : (t.zekerheid || {}).genre === hpView.zek || (t.zekerheid || {}).klank === hpView.zek)));
+  const filt = `<div class="row" style="margin:4px 0 10px"><input id="hpQ" class="grow" placeholder="Zoek in je profiel" value="${esc(hpView.q)}">
+    <select id="hpKnop" style="max-width:180px"><option value="">Alle knoppen</option>${hp.quick_tags.map(x => `<option value="${esc(x.id)}"${hpView.knop === x.id ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
+    <select id="hpZek" style="max-width:200px"><option value="">Alle zekerheid</option>${['hoog', 'midden', 'laag', 'onbevestigd'].map(z => `<option${hpView.zek === z ? ' selected' : ''}>${z}</option>`).join('')}</select>
+    <span class="small muted">${list.length} tracks</span></div>`;
+  const opts = f => hpGroups(f).filter(x => !x.endsWith('*'));
+  const trackHTML = t => {
+    const i = all.indexOf(t), z = t.zekerheid || {};
+    const tagRow = (f, name) => `<div class="hpr"><span class="small muted hpk">${name}</span>${(t[f] || []).map(x => `<span class="chip hpt">${esc(x)}<button data-hrm="${f}" data-v="${esc(x)}" title="Weghalen">×</button></span>`).join('')}
+      <select data-hadd="${f}" class="hpadd"><option value="">+ ${name}</option>${opts(f).filter(x => !(t[f] || []).includes(x)).map(x => `<option>${esc(x)}</option>`).join('')}</select></div>`;
+    const links = Object.entries(t.links || {}).filter(([, v]) => v).map(([k, v]) => `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(k)}</a>`).join(' · ');
+    return `<div class="hpt-row card${hpValid(t) ? '' : ' hpinv'}" data-hi="${i}">
+      <div class="row" style="justify-content:space-between;align-items:flex-start"><div><b>${esc(t.titel)}</b>${t.versie ? ` <span class="muted">(${esc(t.versie)})</span>` : ''} <span class="muted">– ${esc(t.artiesten)}</span>
+        <div class="small muted">${esc([t.label, t.jaar, t.bpm ? t.bpm + ' BPM' : ''].filter(Boolean).join(' · '))}${links ? ' · ' + links : ''}</div></div>
+        <div class="row" style="gap:4px">${t.door_gebruiker_bevestigd ? '<span class="chip hpme">door jou bevestigd</span>' : `<span class="chip">tags van Claude</span><button class="btn small primary" data-hok="1">Klopt</button>`}</div></div>
+      <div class="row" style="gap:4px;margin:6px 0">
+        <span class="chip hpg">${esc(t.hoofdgenre)}${t.alternatief_genre ? ' / ' + esc(t.alternatief_genre) : ''}</span>${zekHTML('genre', z.genre)}${zekHTML('klank', z.klank)}
+        ${hpKeySelect(t)}
+        ${hpValid(t) ? '' : '<span class="chip noavail" title="Onbekend genre of id-twijfel: telt niet mee in je profiel">telt niet mee</span>'}</div>
+      <div class="hpr">${hp.quick_tags.map(x => `<button class="tchip${(t.quick_tags || []).includes(x.id) ? ' on' : ''}" data-hq="${esc(x.id)}" title="${esc(hpButtonTitle(x))}">${esc(x.label)}</button>`).join('')}</div>
+      ${tagRow('stijlen', 'stijl')}${tagRow('klank', 'klank')}${tagRow('functie', 'functie')}
+      ${t.beschrijving ? `<div class="small muted" style="margin-top:4px">${esc(t.beschrijving)}</div>` : ''}</div>`;
+  };
+  const log = (state.hpLog || []).slice(-40).reverse();
+  const logHTML = `<div class="card"><details><summary><b>Wijzigingslog</b> <span class="small muted">${(state.hpLog || []).length} wijzigingen</span></summary>
+    ${log.map(l => `<div class="small"><span class="muted">${esc(l.ts.slice(0, 16).replace('T', ' '))}</span> ${l.track ? esc(l.track) + ' · ' : ''}<b>${esc(l.veld)}</b>: ${esc(Array.isArray(l.van) ? l.van.join(', ') || '—' : l.van ?? '')}${l.van != null ? ' → ' : ''}${esc(Array.isArray(l.naar) ? l.naar.join(', ') || '—' : l.naar ?? '')}</div>`).join('') || '<div class="small muted">Nog niets aangepast.</div>'}</details></div>`;
+  const labels = Object.keys((hp.ontdekking || {}).labels || {});
+  const off = state.hpLabelsOff || {};
+  const labHTML = `<div class="card"><details><summary><b>Labels als startpunt</b> <span class="small muted">${labels.filter(l => !off[l]).length} van ${labels.length} aan · zet grote labels uit als ze de aanbevelingen vullen</span></summary>
+    <div class="hplabs">${labels.map(l => `<label class="chk small"><input type="checkbox" data-hlab="${esc(l)}"${off[l] ? '' : ' checked'} style="width:auto"> ${esc(l)}</label>`).join('')}</div></details></div>`;
+  box.innerHTML = head + stats + btns + labHTML + filt + list.map(trackHTML).join('') + logHTML;
+}
+const CAM_ALL = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].flatMap(n => [n + 'A', n + 'B']);
+const PCS_FILE = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+const camToFile = code => { const m = /^(\d+)([AB])$/.exec(code); if (!m) return null; const pc = (m[2] === 'A' ? CAM_MIN : CAM_MAJ).indexOf(+m[1]); return PCS_FILE[pc] + (m[2] === 'A' ? ' min' : ' maj'); };
+function hpKeySelect(t){
+  const it = hpItem(t), k = keyOfK(enKey({artists: it.artists, title: t.titel})) || keyOf(it), cur = k ? k.cam : '';
+  const tip = k ? camelotName(k.cam) + (k.src === 'profiel' ? ' · uit je profiel' : ' · gemeten uit de preview, zekerheid ' + k.sure) : 'Nog niet bekend: wordt gemeten uit de preview';
+  return `<select data-hkey="1" class="hpadd" title="${esc(tip)}"><option value="">key ${k ? '' : '?'}</option>${CAM_ALL.map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select>${k && k.src === 'gemeten' ? '<span class="small muted">gemeten</span>' : ''}`;
+}
+function hpRerender(){ const y = window.scrollY; renderHouse(); window.scrollTo(0, y); hpSyncTypes(); renderPushBar(); renderTypeChips(); }
+function hpButtonsChanged(what){
+  state.hpButtonsEdited = true;
+  const n = hpRecompute();
+  hpLog(null, 'knoppen', null, what + ` · ${n} tracks opnieuw berekend`);
+  // measured candidates get their buttons again too
+  Object.keys(state.types).forEach(k => { const t = state.types[k]; if (t && !t.manual && t.derived){ const r = hpQuickFor(t.derived); t.ruleTags = r; t.tags = r.concat((t.tags || []).filter(x => !r.includes(x) && hpQ(x))).slice(0, Math.max(2, r.length)); } });
+  save(); hpRerender(); refreshTypes();
+  const m = $('#hpMsg'); if (m) m.innerHTML = `<span class="ok">${esc(what)}. ${n} tracks opnieuw berekend.</span>`;
+}
+function hpInit(){
+  if (!HOUSE) return;
+  const nb = $('#navHouse'); if (nb) nb.hidden = false;
+  const pr = $('#preset'); if (pr) pr.closest('label').style.display = 'none';
+  const pc = document.querySelector('#popMode option[value="classics"]'); if (pc) pc.remove();
+  if ($('#popMode').value === 'classics') $('#popMode').value = 'gems';
+  const box = $('#houseView');
+  box.addEventListener('change', async e => {
+    const el = e.target;
+    if (el.id === 'hpFile'){
+      const f = el.files[0]; el.value = ''; if (!f) return;
+      const m = $('#hpMsg');
+      try {
+        const d = JSON.parse(await readTextFile(f));
+        const r = hpImport(d);
+        renderHouse(); renderPushBar(); renderTypeChips();
+        $('#hpMsg').innerHTML = `<span class="ok">Geïmporteerd: ${r.nieuw} nieuw, ${r.bijgewerkt} bijgewerkt${r.beschermd ? `, ${r.beschermd} door jou bevestigd en niet overschreven` : ''}.</span>`;
+        setTimeout(() => measureExamples(), 500);
+      } catch(err){ m.innerHTML = `<span class="bad">Import mislukt: ${esc(err.message)}</span>`; }
+      return;
+    }
+    if (el.id === 'hpKnop'){ hpView.knop = el.value; return hpRerender(); }
+    if (el.id === 'hpZek'){ hpView.zek = el.value; return hpRerender(); }
+    if (el.dataset.hlab != null){ state.hpLabelsOff = state.hpLabelsOff || {}; if (el.checked) delete state.hpLabelsOff[el.dataset.hlab]; else state.hpLabelsOff[el.dataset.hlab] = true; save(); return; }
+    if (el.dataset.hkey && el.value){
+      const t = state.hp.tracks[+el.closest('[data-hi]').dataset.hi], prev = t.toonsoort || null, next = camToFile(el.value);
+      if (next && next !== prev){ t.toonsoort = next; hpMine(t); hpLog(t, 'toonsoort', prev ? prev + ' (' + toCamelot(prev) + ')' : '—', next + ' (' + el.value + ')'); hpKeyMap = null; save(); }
+      return hpRerender();
+    }
+    if (el.dataset.hadd && el.value){
+      const t = state.hp.tracks[+el.closest('[data-hi]').dataset.hi], f = el.dataset.hadd;
+      if (hpTagOk(f, el.value)) hpSetField(t, f, (t[f] || []).concat(el.value));
+      return hpRerender();
+    }
+  });
+  let qT = null;
+  box.addEventListener('input', e => { if (e.target.id === 'hpQ'){ clearTimeout(qT); qT = setTimeout(() => { hpView.q = e.target.value; renderHouse(); const i = $('#hpQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); } });
+  box.addEventListener('toggle', e => { if (e.target.id === 'hpBtnBox') hpView.open = e.target.open; }, true);
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'hpExport') return download('house_soundprofiel.json', hpExport());
+    if (b.id === 'hpExportLog'){
+      const rows = [['tijd', 'track_id', 'track', 'veld', 'van', 'naar']].concat((state.hpLog || []).map(l => [l.ts, l.track_id || '', l.track || '', l.veld, [].concat(l.van ?? '').join('|'), [].concat(l.naar ?? '').join('|')]));
+      return download('house_wijzigingslog.csv', rows.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(',')).join('\n'), 'text/csv');
+    }
+    if (b.id === 'hpAddBtn'){
+      const label = $('#hpNewLabel').value.trim(); if (!label) return;
+      const lab = label.startsWith('+') ? label : '+' + label;
+      let id = norm(lab.replace(/^\+/, '')).replace(/\s+/g, '-') || 'knop';
+      while (hpQ(id)) id += '-2';
+      state.hp.quick_tags.push({id, label: lab, betekenis: '', regel: {}, voorbeelden: []});
+      hpView.edit = id; hpView.open = true;
+      hpLog(null, 'knop toegevoegd', null, lab); save(); return hpRerender();
+    }
+    const row = b.closest('[data-qi]');
+    if (row && b.dataset.qa){
+      const QT = state.hp.quick_tags, i = +row.dataset.qi, q = QT[i], a = b.dataset.qa;
+      if (a === 'edit'){ hpView.edit = q.id; return hpRerender(); }
+      if (a === 'cancel'){ hpView.edit = null; return hpRerender(); }
+      if (a === 'up' || a === 'down'){ const j = a === 'up' ? i - 1 : i + 1; if (j < 0 || j >= QT.length) return; [QT[i], QT[j]] = [QT[j], QT[i]]; state.hpButtonsEdited = true; hpLog(null, 'knop verplaatst', null, q.label); save(); return hpRerender(); }
+      if (a === 'del'){
+        if (!confirm(`Knop ${q.label} verwijderen? De onderliggende tags (stijl, klank, functie) blijven bij de tracks staan.`)) return;
+        QT.splice(i, 1);
+        state.hp.tracks.forEach(t => { if ((t.quick_tags || []).includes(q.id)) t.quick_tags = t.quick_tags.filter(x => x !== q.id); });
+        if (state.target) state.target.types = (state.target.types || []).filter(x => x !== q.id);
+        return hpButtonsChanged('Knop ' + q.label + ' verwijderd');
+      }
+      if (a === 'save'){
+        const val = f => row.querySelector(`[data-qf="${f}"]`).value;
+        const regel = {}, bad = [];
+        const fieldOf = {stijlen: 'stijlen', klank: 'klank', meta: 'meta', functie: 'functie', klank_alleen_bij_house: 'klank'};
+        Object.keys(fieldOf).forEach(f => {
+          const list = val(f).split(',').map(x => x.trim()).filter(Boolean);
+          list.forEach(x => { if (!hpTagOk(fieldOf[f], x)) bad.push(x); });
+          if (list.length) regel[f] = list;
+        });
+        if (bad.length){ $('#hpQErr').textContent = 'Niet in je taxonomie: ' + bad.join(', ') + '. Nieuwe tags voeg ik niet zelf toe.'; return; }
+        const label = val('label').trim() || q.label, was = {label: q.label, regel: q.regel};
+        q.label = label.startsWith('+') ? label : '+' + label; q.regel = regel; q.betekenis = val('betekenis').trim(); hpView.edit = null;
+        hpLog(null, 'knop ' + q.id, hpRuleText(was.regel) + (was.label !== q.label ? ' (' + was.label + ')' : ''), hpRuleText(regel) + (was.label !== q.label ? ' (' + q.label + ')' : ''));
+        return hpButtonsChanged('Knop ' + q.label + ' bijgewerkt');
+      }
+    }
+    const tr = b.closest('[data-hi]'); if (!tr) return;
+    const t = state.hp.tracks[+tr.dataset.hi];
+    if (b.dataset.hok){ t.door_gebruiker_bevestigd = true; t.bron_tags = 'gebruiker'; hpLog(t, 'bevestigd', null, 'Klopt'); save(); return hpRerender(); }
+    if (b.dataset.hq){ const k = b.dataset.hq, cur = t.quick_tags || []; hpSetField(t, 'quick_tags', cur.includes(k) ? cur.filter(x => x !== k) : hp_order(cur.concat(k))); return hpRerender(); }
+    if (b.dataset.hrm){ const f = b.dataset.hrm; hpSetField(t, f, (t[f] || []).filter(x => x !== b.dataset.v)); return hpRerender(); }
+  });
+}
+const hp_order = list => state.hp.quick_tags.map(q => q.id).filter(id => list.includes(id));
+
+hpInit();
 renderRecs(); refreshStyleFilter();
 
 spStatus(); spHandleRedirect();
@@ -3400,7 +3911,7 @@ if (SERVED){
   fetch('/__backup', {cache: 'no-store'}).then(r => r.ok ? r.json() : null).then(d => {
     if (d && (d.sets || d.likes || d.playlists)){
       const added = mergeData(d);
-      if (added){ localStorage.setItem(LS_KEY, JSON.stringify(state)); toast(added + ' sets/likes/playlists teruggezet uit je back-up'); renderRecs(); refreshStyleFilter(); }
+      if (added){ localStorage.setItem(LS_KEY, JSON.stringify(state)); toast(added + ' sets/likes/playlists teruggezet uit je back-up'); renderRecs(); refreshStyleFilter(); if (HOUSE){ renderTypeChips(); renderHouse(); } }
     }
   }).catch(() => {}).finally(() => { backupReady = true; scheduleBackup(); $('#bkMsg') && ($('#bkMsg').textContent = 'Automatische back-up staat aan: digging-data.json in je app-map.'); });
 }
