@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="44">
+<meta name="dt-version" content="45">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -4544,18 +4544,48 @@ async function openDj(name){
     : `Geen tracklists gevonden. ${notes.join(' · ')}`;
   if (scInfo && scInfo.server < 4) $('#djMsg').insertAdjacentHTML('beforeend', `<div class="warn" style="margin-top:6px">Je tool-server moet eenmalig bijgewerkt worden voor set79. Open Terminal, plak deze regel en druk Enter, en herlaad dan deze pagina:</div><div class="row" style="margin-top:4px"><code class="grow" style="word-break:break-all">${esc(SC_FIX)}</code><button class="btn small" id="djFix">Kopieer</button></div>`);
   const fx = $('#djFix'); if (fx) fx.onclick = () => { navigator.clipboard.writeText(SC_FIX); fx.textContent = 'Gekopieerd'; };
-  $('#djList').innerHTML = list.slice(0, 150).map((x, i) => `<div class="sr djr">
+  $('#djList').innerHTML = list.slice(0, 150).map((x, i) => `<div class="sr djr" data-i="${i}">
       ${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? '<span></span>' : `<button class="play" data-djp="${i}" aria-label="Speel ${esc(x.title)}">▶</button>`}
       <div class="ph"></div>
       <div class="n"><b>${esc(x.title)}</b><span>${esc(x.artist)}${x.own ? ' · eigen track' : ''}</span></div>
       <span class="small">${x.id ? '<span class="chip fit">ID</span> ' : ''}<span class="muted" title="${esc(x.sets.map(s => sets[s].name).join('\n'))}">in ${x.sets.length} set${x.sets.length > 1 ? 's' : ''}</span></span>
       <span class="row" style="gap:4px">${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? `<a class="small" href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" ' + x.artist + ' ID')}" target="_blank" rel="noopener">zoek dit ID</a>` : `<button class="btn small" data-djpl="${i}">+ Playlist</button><button class="btn small primary" data-djr="${i}">Aanbevelingen</button>`}</span>
     </div>`).join('');
+  djCovers(run);
   $('#djSets').innerHTML = sets.map(s => `<div><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a> <span class="muted">${s.src}${s.date ? ' · ' + s.date : ''} · ${s.tracks.length} tracks</span></div>`).join('') || '<span class="muted">Geen.</span>';
+}
+// covers (and the Deezer track, so playing starts faster) for the rows, one by one
+async function coverFor(artist, title){
+  const a = splitArtists(artist)[0] || artist, t = cleanTitle(title);
+  return cached('cv:' + norm(a) + '|' + titleCore(t), async () => {
+    try {
+      const d = await dz('/search', {q: `artist:"${a}" track:"${t}"`, limit: 10}, 30 * 864e5);
+      const L = (d && d.data) || [];
+      const hit = L.find(x => artistMatch(x.artist && x.artist.name, a) && titleCore(x.title).includes(titleCore(t))) || L.find(x => artistMatch(x.artist && x.artist.name, a));
+      if (hit && hit.album) return {thumb: hit.album.cover_medium || hit.album.cover_small || '', dz: hit.id, preview: hit.preview || ''};
+    } catch(e){}
+    try {
+      const d = await jsonp(`https://itunes.apple.com/search?term=${encodeURIComponent(a + ' ' + t)}&entity=song&limit=10`);
+      const hit = (d.results || []).find(x => artistMatch(x.artistName, a) && titleCore(x.trackName).includes(titleCore(t))) || (d.results || []).find(x => artistMatch(x.artistName, a));
+      if (hit && hit.artworkUrl100) return {thumb: hit.artworkUrl100.replace('100x100', '200x200'), preview: hit.previewUrl || ''};
+    } catch(e){}
+    return {};
+  });
+}
+async function djCovers(run){
+  const rows = [...document.querySelectorAll('#djList .djr')];
+  for (const r of rows){
+    if (run !== djRun) return;
+    const x = djList[+r.dataset.i]; if (!x || x.artist === 'ID' || isIdPart(cleanTitle(x.title))) continue;
+    const c = await coverFor(x.artist, x.title).catch(() => ({}));
+    if (run !== djRun) return;
+    if (c.dz){ x.dzTrackId = c.dz; x.preview = c.preview; }
+    if (c.thumb){ const ph = r.querySelector('.ph'); if (ph){ const img = document.createElement('img'); img.alt = ''; img.referrerPolicy = 'no-referrer'; img.src = c.thumb; ph.replaceWith(img); } }
+  }
 }
 $('#searchRecs').addEventListener('click', e => {
   const p = e.target.closest('[data-djp]'), pl = e.target.closest('[data-djpl]'), r = e.target.closest('[data-djr]');
-  if (p){ const from = +p.dataset.djp; const items = djList.slice(from).filter(x => x.artist !== 'ID' && !isIdPart(cleanTitle(x.title))).map(x => ({artist: x.artist, title: x.title})); playQueue(items, 0); }
+  if (p){ const from = +p.dataset.djp; const items = djList.slice(from).filter(x => x.artist !== 'ID' && !isIdPart(cleanTitle(x.title))).map(x => ({artist: x.artist, title: x.title, dzTrackId: x.dzTrackId, preview: x.preview})); playQueue(items, 0); }
   if (pl){ const x = djList[+pl.dataset.djpl]; hitToItem({artist: x.artist, title: x.title, album: '', thumb: ''}).then(c => openPlMenu(pl, c)); }
   if (r){ const x = djList[+r.dataset.djr]; recsFromHit({artist: x.artist, title: x.title, album: '', thumb: ''}); }
 });
