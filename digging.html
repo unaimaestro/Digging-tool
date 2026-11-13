@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="50">
+<meta name="dt-version" content="51">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -1179,25 +1179,66 @@ async function similarTo(item, progTarget){
     plan.push({params: Object.assign({style: st.slice(0, 2).join(', ')}, yr), label: 'Stijl ' + st.slice(0, 2).join(' + ')});
     if (seed.year) [-2, -1, 1, 2].forEach(d => plan.push({params: {style: st[0], year: seed.year + d}, label: 'Stijl ' + st[0] + ' ' + (seed.year + d)}));
   }
-  const opts = {popMode: $('#popMode').value, capLabel: 4, capArtist: 2, limit: 60, noShown: true};
-  let list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.1 + 0.75 * f, l + '…'));
+  const opts = {popMode: $('#popMode').value, capLabel: 4, capArtist: 2, limit: 90, noShown: true};
+  // listen to the track itself first: everything after this is compared to how IT sounds
+  prog(0.08, 'Deze track beluisteren…');
+  try { await measureEnergy(item); } catch(e){}
+  let list = await gatherAndRank(P, plan, opts, (f, l) => prog(0.1 + 0.6 * f, l + '…'));
   // nearby years get a small boost
   if (seed.year) list.forEach(c => { if (c.year) c.score *= 1 - Math.min(0.25, Math.abs(c.year - seed.year) * 0.025); });
   // don't keep showing the same tracks: ones already shown as "similar" elsewhere sink, ones in your main list a bit
   const onMain = new Set((state.lastRecs || []).map(candKey));
   list.forEach(c => { const k = candKey(c), n = simShown.get(k) || 0; c.score *= n ? Math.pow(0.4, n) : onMain.has(k) ? 0.75 : 1; });
   list.sort((a, b) => b.score - a.score);
-  // listen: tracks that sound like this one (same type, close energy) go up
-  try {
-    const listen = [item].concat(list.slice(0, 20));
-    await measureMany(listen, (d, n) => prog(0.85 + 0.15 * d / n, `Klank vergelijken ${d}/${n}…`));
-    const e0 = energyOf(item), t0 = typesOf(item) || [], S = soundProfile();
-    list.forEach(c => { const r = soundFit(e0, t0, c), m = soundMatch(c, S); c.fit = r.f; c.fitWhy = r.why; c.score *= r.f * m.f; c.sound = m.f; });
-    list = list.filter(c => !(c.sound < 0.35) && c.score > 0);
-    list.sort((a, b) => b.score - a.score);
-  } catch(e){}
+  // listen: only tracks that really sound like this one stay (vocals, groove, tone, tempo, energy)
+  try { list = await soundAlike(item, list, (f, t) => prog(0.7 + 0.3 * f, t)); } catch(e){}
   prog(1, '');
-  return list.slice(0, 30);
+  const res = list.slice(0, 20); res.meta = list.meta; return res;
+}
+// Similar = sounds like the seed. Network (artists, labels) only finds candidates; the sound decides.
+const VOCAL_WORDS = /\b(vocal|vox|feat\.?|ft\.|featuring|acapella|a cappella)\b/i;
+const isVocalText = c => VOCAL_WORDS.test((c.title || '') + ' ' + (c.trackTitle || '')) || (c.styles || []).includes('Vocal');
+async function soundAlike(seed, list, prog){
+  const se = state.energy[enKey(seed)], sf = se && se.ft, sv = sf && sf.vo, sb = bpmOf(seed), e0 = energyOf(seed), t0 = typesOf(seed) || [];
+  const seedVocal = sv != null ? sv > 0.25 : isVocalText(seed), seedDry = sv != null ? sv < 0.12 : !isVocalText(seed);
+  // words in the title already give vocals away: no need to listen to those for an instrumental seed
+  if (seedDry) list = list.filter(c => !isVocalText(c));
+  const listen = list.slice(0, 50);
+  await measureMany(listen, (d, n) => prog(d / n, `Klank vergelijken met deze track ${d}/${n}…`));
+  const S = soundProfile();
+  // spread of each feature: from your own library, else from the candidates themselves
+  let sd = S.sd;
+  if (!sd){ sd = {}; FT_KEYS.forEach(k => { const v = listen.map(c => (state.energy[enKey(c)] || {}).ft).filter(Boolean).map(f => f[k]).filter(x => x != null);
+    if (v.length < 4) return; const m = v.reduce((a, b) => a + b, 0) / v.length; sd[k] = ftSd(k, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length)); }); }
+  const out = [];
+  listen.forEach(c => {
+    const e = state.energy[enKey(c)], ft = e && e.ft;
+    if (!ft) return;                                   // not heard = not shown: fewer, but real matches
+    const why = [];
+    let f = 1;
+    if (sv != null && ft.vo != null){
+      if (seedDry && ft.vo > 0.2) return;              // instrumental seed: no vocal tracks, ever
+      if (seedDry && ft.vo < 0.1) why.push('geen vocals');
+      if (seedVocal && ft.vo < 0.08) f *= 0.6; else if (seedVocal && ft.vo > 0.25) why.push('ook vocals');
+    } else if (seedDry && ft.vo > 0.25) return;
+    const b = bpmOf(c);
+    if (sb && b){ const d = Math.min(...[b, b * 2, b / 2].map(x => Math.abs(x - sb))); if (d > 7) return; if (d <= 3) why.push(b + ' BPM'); }
+    const en = energyOf(c);
+    if (e0 && en){ const d = Math.abs(en - e0); if (d >= 2) return; f *= d ? 0.85 : 1.1; }
+    const t = typesOf(c) || [];
+    if (t0.length && t.length){ const same = t.filter(x => t0.includes(x)); if (same.length){ f *= 1.25; why.push(same.map(typeName).join('/')); } else f *= 0.6; }
+    let dist = null;
+    if (sf){ dist = ftDist(sf, ft, sd); if (dist != null){ if (dist > 1.5) return; f *= Math.exp(-1.6 * dist); if (dist < 0.6) why.unshift('zelfde klank'); } }
+    const m = soundMatch(c, S);
+    if (m.f < 0.35) return;
+    c.sound = m.f; c.fit = f; c.fitWhy = why; c.dist = dist;
+    // the sound match leads; the network score only breaks ties
+    c.score = Math.pow(Math.max(1e-6, c.score), 0.3) * f * Math.sqrt(m.f);
+    out.push(c);
+  });
+  out.sort((a, b) => b.score - a.score);
+  out.meta = {heard: listen.length, kept: out.length, seedVo: sv};
+  return out;
 }
 const asItem = t => Object.assign({styles: [], labels: [], genres: [], artists: (t.artist || '').split(',').map(n => ({name: n.trim()})).filter(a => a.name)}, t, {styles: t.styles || [], labels: t.labels || [], genres: t.genres || []});
 // What would fit this playlist? Its own artists/labels network, then filtered on the sound and energy of the playlist itself.
@@ -1422,6 +1463,56 @@ document.addEventListener('click', e => {
   save(); refreshBadges(b.dataset.ek); applyDigitalFilter();
 }, true);
 
+// vocal presence: share of the preview where a voice-like pitch is heard (pitched, gliding, not beat-locked stable synth)
+function vocalScore(L, R, sr){
+  const k = Math.max(1, Math.round(sr / 11025)), fs = sr / k, n = Math.floor(L.length / k);
+  const x = new Float32Array(n);
+  // decimate (box average) + high-pass ~250 Hz (two one-pole stages) to remove kick/bass
+  const a = Math.exp(-2 * Math.PI * 250 / fs); let h1 = 0, p1 = 0, h2 = 0, p2 = 0;
+  for (let i = 0; i < n; i++){
+    let s = 0; for (let j = 0; j < k; j++){ const q = i * k + j; s += (L[q] + R[q]) * 0.5; } s /= k;
+    h1 = a * (h1 + s - p1); p1 = s; h2 = a * (h2 + h1 - p2); p2 = h1; x[i] = h2;
+  }
+  const W = Math.round(0.046 * fs), hop = Math.round(0.02 * fs), lo = Math.floor(fs / 900), hi = Math.ceil(fs / 90);
+  // the middle 16 seconds are enough and keep this quick
+  const s0 = Math.floor(Math.max(n * 0.05, n / 2 - 8 * fs)), s1 = Math.floor(Math.min(n * 0.95, n / 2 + 8 * fs)) - W - hi;
+  const fr = [];
+  for (let st = s0; st < s1; st += hop){
+    let e0 = 0; for (let i = 0; i < W; i++) e0 += x[st + i] * x[st + i];
+    if (e0 < 1e-7){ fr.push({e: e0, p: 0, f: 0}); continue; }
+    let best = 0, bl = 0; const r = new Float32Array(hi + 2);
+    for (let l = lo; l <= hi + 1; l++){
+      let c = 0, e1 = 0; for (let i = 0; i < W; i++){ const y = x[st + i + l]; c += x[st + i] * y; e1 += y * y; }
+      r[l] = c / Math.sqrt(e0 * e1 + 1e-12);
+    }
+    // first strong peak (avoid octave errors): highest local max, prefer shorter lag within 0.9 of max
+    let mx = 0; for (let l = lo + 1; l <= hi; l++) if (r[l] > mx && r[l] >= r[l - 1] && r[l] >= r[l + 1]) mx = r[l];
+    for (let l = lo + 1; l <= hi; l++) if (r[l] >= r[l - 1] && r[l] >= r[l + 1] && r[l] >= 0.9 * mx){ best = r[l]; bl = l; break; }
+    // parabolic refinement
+    let lag = bl; if (bl > lo && bl < hi){ const y0 = r[bl - 1], y1 = r[bl], y2 = r[bl + 1], d = y0 - 2 * y1 + y2; if (d) lag = bl + 0.5 * (y0 - y2) / d; }
+    fr.push({e: e0, p: best, f: lag ? fs / lag : 0});
+  }
+  const es = fr.map(f => f.e).sort((a, b) => a - b), med = es[Math.floor(es.length / 2)] || 0;
+  const vo = fr.map(f => f.p > 0.55 && f.e > 0.15 * med && f.f > 90 && f.f < 900);
+  // runs of continuous pitch
+  let voiced = 0, voice = 0, steady = 0, i = 0;
+  while (i < fr.length){
+    if (!vo[i]){ i++; continue; }
+    let j = i; const c = [];
+    while (j + 1 < fr.length && vo[j + 1] && Math.abs(1200 * Math.log2(fr[j + 1].f / fr[j].f)) < 80){ c.push(1200 * Math.log2(fr[j + 1].f / fr[j].f)); j++; }
+    const len = j - i + 1;
+    if (len >= 5){
+      voiced += len;
+      const absd = c.map(Math.abs), md = absd.reduce((a, b) => a + b, 0) / absd.length;
+      const span = (() => { let s = 0, m = 0, M = 0; c.forEach(d => { s += d; m = Math.min(m, s); M = Math.max(M, s); }); return M - m; })();
+      // voice: pitch keeps moving a little (vibrato/glide), but stays continuous; synths/instruments sit dead still
+      if (md > 3 && md < 40 && span > 20) voice += len; else steady += len;
+    }
+    i = j + 1;
+  }
+  const N = fr.length || 1;
+  return {vo: voice / N, pv: voiced / N, st: steady / N};
+}
 function audioFeatures(ab){
   const sr = ab.sampleRate, n = ab.length;
   const L = ab.getChannelData(0), R = ab.numberOfChannels > 1 ? ab.getChannelData(1) : L;
@@ -1481,8 +1572,9 @@ function audioFeatures(ab){
   for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) change = Math.max(change, Math.abs(S[i].db - S[j].db) + 20 * Math.abs(S[i].lo - S[j].lo) + 40 * Math.abs(S[i].hi - S[j].hi));
   const r2 = x => Math.round(x * 1000) / 1000;
   const key = HOUSE ? detectKey(ab) : null;
+  let vocal = null; try { vocal = vocalScore(L, R, sr).vo; } catch(e){}
   return {key, db: r2(db), lowShare: r2(Math.sqrt(sLow / sAll)), highShare: r2(Math.sqrt(sHigh / sAll)), onsetRate: r2(onsetRate), bpm: bestLag, crest: r2(20 * Math.log10(p90 / p10)),
-    periodicity: r2(periodicity), fourFloor: r2(fourFloor), echo: r2(echo), sparsity: r2(sparsity), change: r2(change)};
+    periodicity: r2(periodicity), fourFloor: r2(fourFloor), echo: r2(echo), sparsity: r2(sparsity), change: r2(change), vocal: vocal == null ? null : r2(vocal)};
 }
 function energyFrom(f, meta){
   const bpm = meta.bpm > 60 ? meta.bpm : f ? f.bpm : 0;
@@ -1498,7 +1590,7 @@ function energyFrom(f, meta){
   if (!parts.length) return null;
   const w = parts.reduce((a, p) => a + p[0], 0);
   const raw = parts.reduce((a, p) => a + p[0] * p[1], 0) / w;
-  const ft = f ? {lo: f.lowShare, hi: f.highShare, on: f.onsetRate, db: f.db, per: f.periodicity, sp: f.sparsity, ff: f.fourFloor, ec: f.echo, cr: f.crest, ch: f.change} : null;
+  const ft = f ? {lo: f.lowShare, hi: f.highShare, on: f.onsetRate, db: f.db, per: f.periodicity, sp: f.sparsity, ff: f.fourFloor, ec: f.echo, cr: f.crest, ch: f.change, vo: f.vocal} : null;
   const out = {e: Math.max(1, Math.min(5, 1 + Math.round(raw * 4))), raw: Math.round(raw * 100) / 100, why: why.join(', '), partial: !f, bpm: bpm ? Math.round(bpm) : 0, ft};
   if (f && f.key) out.key = f.key;
   return out;
@@ -1978,7 +2070,8 @@ async function measureEnergy(c){
   const recentTry = haveT && haveT.tried && Date.now() - haveT.tried < 7 * 864e5;
   const oldFormat = have && !have.manual && !have.partial && !have.ft && !recentTry;
   const needKey = HOUSE && have && !have.key && !have.keyTried;
-  if (!needKey && !oldFormat && have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
+  const needVo = have && have.ft && have.ft.vo == null && !(have.voTried && Date.now() - have.voTried < 14 * 864e5);
+  if (!needKey && !needVo && !oldFormat && have && (have.manual || !have.partial || recentTry) && haveT && (haveT.manual || haveT.audio || recentTry)) return have;
   const artist = c.artists.map(a => a.name).join(', '), title = c.source === 'deezer' || c.trackFound ? c.title : c.title || c.releaseTitle;
   let meta = {}, preview = c.preview;
   try {
@@ -1992,6 +2085,7 @@ async function measureEnergy(c){
   if (r && !(have && have.manual)) state.energy[key] = r;
   else if (r && have && have.manual){ have.bpm = r.bpm; have.ft = r.ft; if (r.key) have.key = r.key; }
   if (HOUSE && state.energy[key]) state.energy[key].keyTried = true;
+  if (state.energy[key] && !(state.energy[key].ft && state.energy[key].ft.vo != null)) state.energy[key].voTried = Date.now();
   if (!(haveT && haveT.manual)){
     trainCache = null;
     const t = classifyTrack(key, f, c.styles, c);
@@ -2851,9 +2945,18 @@ function fitOf(c, T){
 /* --- your sound: BPM range + audio character of your set tracks and likes --- */
 const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.max(0, Math.round(q * (b.length - 1))))] : 0; };
 const bpmOf = c => { const e = state.energy[enKey(c)]; if (!e) return 0; if (e.bpm) return e.bpm; const m = /(\d+) BPM/.exec(e.why || ''); return m ? +m[1] : 0; };
-const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff'];
+const FT_KEYS = ['lo', 'hi', 'on', 'db', 'per', 'sp', 'ff', 'vo'];
+// smallest spread per feature: a library without vocals would otherwise make any trace of a voice look extreme
+const FT_SDMIN = {vo: 0.06};
+const ftSd = (k, v) => Math.max(FT_SDMIN[k] || 1e-3, v);
+// average distance in standard deviations over the features both tracks have; vocals count double
+function ftDist(a, b, sd){
+  let t = 0, w = 0;
+  FT_KEYS.forEach(k => { if (a[k] == null || b[k] == null || !sd[k]) return; const x = k === 'vo' ? 2 : 1; t += x * Math.min(4, Math.abs((a[k] - b[k]) / sd[k])); w += x; });
+  return w ? t / w : null;
+}
 function soundProfile(only){
-  const items = only || state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes, plTracksAll(), hpItems());
+  const items = only || state.sets.flatMap(s => s.tracks.map(t => t.item)).concat(state.likes, plTracksAll(), hpItems()).filter(c => c && c.artists);
   const bpms = [], fts = [], types = {};
   let nt = 0;
   items.forEach(c => {
@@ -2866,7 +2969,7 @@ function soundProfile(only){
   if (fts.length >= (only ? 4 : 8)){
     S.mu = {}; S.sd = {};
     FT_KEYS.forEach(k => { const v = fts.map(f => f[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1);
-      S.mu[k] = m; S.sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
+      if (v.length < (k === "vo" ? 4 : 1)) return; S.mu[k] = m; S.sd[k] = ftSd(k, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length)); });
   }
   return S;
 }
@@ -2884,12 +2987,14 @@ function soundMatch(c, S){
   }
   if (e.ft && S.mu){
     // average distance in standard deviations of your own sound
-    const z = FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - S.mu[k]) / S.sd[k])), 0) / FT_KEYS.length;
+    const z = ftDist(e.ft, S.mu, S.sd) ?? 1;
     f *= z < 0.8 ? 1.2 : z < 1.2 ? 1 : z < 1.6 ? 0.7 : z < 2.2 ? 0.45 : 0.25;
     if (z >= 1.6) why.push('andere klank');
+    // you hardly play vocal tracks: a clear voice counts hard against it
+    if (S.mu.vo != null && S.mu.vo < 0.12 && e.ft.vo > 0.25){ f *= 0.45; why.push('vocals'); }
   }
   if (e.ft && S.mu && S.bans && S.bans.length){
-    const near = S.bans.some(b => FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - b[k]) / S.sd[k])), 0) / FT_KEYS.length < 0.6);
+    const near = S.bans.some(b => (ftDist(e.ft, b, S.sd) ?? 9) < 0.6);
     if (near){ f *= 0.5; why.push('lijkt op een afgewezen track'); }
   }
   const t = typesOf(c);
@@ -2991,7 +3096,9 @@ async function openSimilar(c){
   try {
     simList = await similarTo(c);
     markSimShown(simList.slice(0, 10));
-    $('#simList').innerHTML = simList.length ? simList.map((x, i) => recHTML(x, i, 'sim')).join('') : '<div class="empty">Niets gevonden.</div>';
+    const M = simList.meta, sv = M && M.seedVo;
+    if (M) $('#simMsg').textContent = `${M.heard} kandidaten beluisterd, ${M.kept} klinken echt zo` + (sv == null ? '' : sv < 0.12 ? ' (deze track heeft geen vocals, dus vocal-tracks zijn eruit gefilterd)' : sv > 0.25 ? ' (deze track heeft vocals)' : '') + '.';
+    $('#simList').innerHTML = simList.length ? simList.map((x, i) => recHTML(x, i, 'sim')).join('') : '<div class="empty">Geen tracks gevonden die echt zo klinken. Liever niets dan iets dat er niet op lijkt.</div>';
     fillAvailability($('#simList'), simList);
     queueEnergy(simList);
   } catch(err){ $('#simMsg').innerHTML = `<span class="bad">${esc(err.message)}</span>`; }
@@ -3694,6 +3801,15 @@ $('#exRetrain').onclick = () => measureExamples(true);
 if (VARIANT.seeds && (state.examplesSeeded || 0) < 2){ state.examples = (state.examples || []).concat(DEFAULT_EXAMPLES.filter(x => !(state.examples || []).some(y => exKey(y) === exKey(x) && y.type === x.type))); state.examplesSeeded = 2; save(); }
 renderExamples();
 setTimeout(() => measureExamples(), 2500);
+// older measurements have no vocal value yet: measure your own tracks again, slowly in the background
+setTimeout(() => {
+  const mine = state.sets.flatMap(s => s.tracks.map(t => t.item)).filter(Boolean).concat(state.likes || [], plTracksAll(), Object.values(trainJudged()).map(j => j.item).filter(Boolean));
+  const seen = new Set(), todo = [];
+  mine.forEach(c => { if (!c || !c.artists || !c.artists.length) return; const k = enKey(c), e = state.energy[k];
+    if (seen.has(k) || !e || !e.ft || e.ft.vo != null || (e.voTried && Date.now() - e.voTried < 14 * 864e5)) return; seen.add(k); todo.push(c); });
+  todo.slice(0, 400).forEach(c => { const k = enKey(c); if (!enQueued.has(k)){ enQueued.add(k); enQueue.push(c); } });
+  runEnergy();
+}, 15000);
 
 /* --- updates: hand a newer digging.html to the local server --- */
 const APP_VERSION = +((document.querySelector('meta[name="dt-version"]') || {}).content || 0);
@@ -4792,7 +4908,7 @@ function trainModel(){
   (state.likes || []).filter(l => l && l.artists && l.artists.length).forEach(l => { const k = enKey(l), e = state.energy[k]; if (e && e.ft && !seen.has(k)){ rows.push({v: 1, w: 1, ft: e.ft, src: 'like'}); seen.add(k); } });
   plTracksAll().forEach(t => { const k = enKey(t), e = state.energy[k]; if (e && e.ft && !seen.has(k)){ rows.push({v: 1, w: 0.8, ft: e.ft, src: 'pl'}); seen.add(k); } });
   const sd = {};
-  FT_KEYS.forEach(k => { const v = rows.map(r => r.ft[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1); sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
+  FT_KEYS.forEach(k => { const v = rows.map(r => r.ft[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1); sd[k] = ftSd(k, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
   return tjCache = {rows, sd, W: trainWords(), n: J.length};
 }
 function trainFit(c, M){
@@ -4800,7 +4916,7 @@ function trainFit(c, M){
   let f = 1; const why = [];
   const e = state.energy[enKey(c)];
   if (e && e.ft && M.rows.length >= 6){
-    const near = M.rows.map(r => ({v: r.v, w: r.w, src: r.src, d: FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - r.ft[k]) / M.sd[k])), 0) / FT_KEYS.length}))
+    const near = M.rows.map(r => ({v: r.v, w: r.w, src: r.src, d: ftDist(e.ft, r.ft, M.sd) ?? 2}))
       .sort((a, b) => a.d - b.d).slice(0, 5);
     let s = 0, w = 0; near.forEach(n => { const x = n.w / (0.3 + n.d); s += n.v * x; w += x; });
     const vote = w ? s / w : 0;
