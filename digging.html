@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="51">
+<meta name="dt-version" content="52">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -681,16 +681,20 @@ async function tryOrder(artist, title, label){
     if (label){ const nl = norm(label); pool.sort((x, y) => ((y.label || []).some(l => norm(l) === nl)) - ((x.label || []).some(l => norm(l) === nl))); }
     for (const r of pool.slice(0, 2).concat(various.slice(0, 1))){
       const item = releaseToItem(await getRelease(r.id), {title});
-      if (item && (item.trackFound || okArtist(r))) return {item, confident: true};
+      // only a release that really has this track counts; the right artist alone is not enough
+      if (item && item.trackFound) return {item, confident: true};
     }
     if (!fallback && params.track) fallback = results[0];
   }
-  return fallback ? {item: releaseToItem(await getRelease(fallback.id), {title}), confident: false} : null;
+  if (!fallback) return null;
+  const fb = releaseToItem(await getRelease(fallback.id), {title});
+  return fb && fb.trackFound ? {item: fb, confident: false} : null;
 }
 // p.order: 'at' | 'ta' | undefined (auto). pref: the order that worked best so far in this set.
 async function resolveTrack(p, pref){
   if (p.a === undefined){ p.a = p.artist; p.b = p.title; p.guess = 'at'; }
   const orders = p.order ? [p.order] : [...new Set([pref || p.guess, p.guess, 'at', 'ta'])].slice(0, 2);
+  if (!p.order && orders.length < 2) orders.push(orders[0] === 'ta' ? 'at' : 'ta');
   let weak = null;
   for (const o of orders){
     const v = orient(p, o);
@@ -3340,21 +3344,33 @@ $('#importBtn').onclick = async () => {
   refreshStyleFilter();
   queueEnergy(set.tracks.map(t => t.item).filter(Boolean));
 };
+// a match is doubtful when it was a guess, or when the release doesn't contain the track
+const setBad = t => t.item && (t.item.uncertain || t.item.trackFound === false);
+// what to play / like for a row: the match when it's good, otherwise just the line from your tracklist
+function setTrackItem(t){
+  if (t.item && !setBad(t)) return t.item;
+  const names = splitArtists(t.p.artist || '');
+  return {source: 'tracklist', releaseId: 'txt:' + norm(t.p.artist) + '|' + norm(t.p.title), artists: (names.length ? names : [t.p.artist]).map(n => ({name: n})),
+    title: t.p.title, releaseTitle: '', labels: t.p.label ? [{name: t.p.label}] : [], styles: [], genres: []};
+}
+const setQ = c => ({artist: c.artists.map(a => a.name).join(', '), title: c.title || c.releaseTitle, preview: c.preview, dzTrackId: c.dzTrackId});
+const setLiked = (set, t) => { const c = setTrackItem(t); return (state.likes || []).some(l => l.releaseId === c.releaseId && (!c.title || !l.title || norm(l.title) === norm(c.title))); };
 function renderSets(){
   $('#setList').innerHTML = state.sets.map(set => {
     const ok = set.tracks.filter(t => t.item).length;
     return `<div class="card" data-set="${set.id}">
       <div class="row"><h2 class="grow" style="margin:0">${esc(set.name)}</h2><span class="small muted">${ok}/${set.tracks.length} gevonden</span>
-      <button class="btn small" data-setact="retry">Opnieuw zoeken (niet gevonden)</button><button class="btn small" data-setact="del">Verwijder set</button></div>
-      <table><tr><th></th><th>Uit je tracklist</th><th>Discogs-match</th><th></th></tr>
-      ${set.tracks.map((t, j) => `<tr data-t="${j}">
-        <td class="${t.item ? (t.item.uncertain ? 'warn' : 'ok') : t.status === 'pending' ? 'muted' : 'warn'}" title="${t.item && t.item.uncertain ? 'Onzekere match, check even' : ''}">${t.item ? (t.item.uncertain ? '◐' : '●') : t.status === 'pending' ? '…' : '○'}</td>
+      <button class="btn small" data-setact="play">▶ Speel set</button><button class="btn small" data-setact="retry">Opnieuw zoeken (niet gevonden of twijfel)</button><button class="btn small" data-setact="del">Verwijder set</button></div>
+      <table><tr><th></th><th></th><th>Uit je tracklist</th><th>Match</th><th></th></tr>
+      ${set.tracks.map((t, j) => { const bad = setBad(t); return `<tr data-t="${j}">
+        <td style="white-space:nowrap"><button class="ib" data-tact="play" title="Speel vanaf hier" aria-label="Speel ${esc(t.p.title)}">▶</button><button class="ib${setLiked(set, t) ? ' on' : ''}" data-tact="like" title="Like">♥</button><button class="ib" data-tact="addpl" title="Zet in playlist">+</button></td>
+        <td class="${t.item ? (bad ? 'warn' : 'ok') : t.status === 'pending' ? 'muted' : 'warn'}" title="${bad ? 'Onzekere match, check even' : ''}">${t.item ? (bad ? '◐' : '●') : t.status === 'pending' ? '…' : '○'}</td>
         <td>${esc(t.p.artist)} – ${esc(t.p.title)}${t.p.label ? ' <span class="muted">[' + esc(t.p.label) + ']</span>' : ''}</td>
-        <td class="small">${t.item ? `<a href="${esc(t.item.uri)}" target="_blank" rel="noopener">${esc(t.item.artists.map(a => a.name).join(', '))} – ${esc(t.item.releaseTitle)}</a><br><span class="muted">${esc(t.item.labels.map(l => l.name + (l.catno ? ' ' + l.catno : '')).join(', '))}${t.item.year ? ' · ' + t.item.year : ''}</span>`
+        <td class="small">${t.item ? `<a href="${esc(t.item.uri)}" target="_blank" rel="noopener">${esc(t.item.artists.map(a => a.name).join(', '))} – ${esc(t.item.trackFound ? t.item.title : t.item.releaseTitle)}</a>${t.item.trackFound && t.item.releaseTitle && norm(t.item.releaseTitle) !== norm(t.item.title) ? ' <span class="muted">op ' + esc(t.item.releaseTitle) + '</span>' : ''}${t.item.trackFound === false ? ' <span class="warn">(track niet op deze release gevonden, waarschijnlijk fout)</span>' : ''}<br><span class="muted">${esc(t.item.labels.map(l => l.name + (l.catno ? ' ' + l.catno : '')).join(', '))}${t.item.year ? ' · ' + t.item.year : ''}</span>`
           : t.status === 'pending' ? '' : '<span class="warn">Niet gevonden.</span> Plak een Deezer-track- of Discogs-release-link:'}
           <div class="row" style="margin-top:4px"><input class="grow small" data-fix placeholder="deezer.com/track/… of discogs.com/release/…" style="padding:3px 6px;${t.item ? 'display:none' : ''}"></div></td>
         <td style="white-space:nowrap">${t.item ? enBadge(t.item) + ' ' + typeChips(t.item) + ' <button class="btn small" data-tact="similar">Similar</button> <button class="btn small" data-tact="edit">Wijzig</button>' : ''}</td>
-      </tr>`).join('')}</table></div>`;
+      </tr>`; }).join('')}</table></div>`;
   }).join('') || '<div class="empty">Nog geen sets.</div>';
 }
 $('#setList').addEventListener('click', async e => {
@@ -3362,15 +3378,21 @@ $('#setList').addEventListener('click', async e => {
   const set = state.sets.find(s => s.id === +card.dataset.set);
   const sa = e.target.dataset.setact, ta = e.target.dataset.tact;
   if (sa === 'del' && confirm('Set "' + set.name + '" verwijderen?')){ state.sets = state.sets.filter(s => s !== set); save(); renderSets(); }
+  if (sa === 'play') playQueue(set.tracks.map(setTrackItem).map(setQ), 0);
   if (sa === 'retry'){
-    for (const t of set.tracks.filter(t => !t.item)){
-      try { t.item = await resolveTrack(t.p); t.status = t.item ? 'ok' : 'notfound'; } catch(err){ t.status = 'error'; }
+    for (const t of set.tracks.filter(t => !t.item || setBad(t))){
+      const old = t.item;
+      if (old && !t.p.order) delete t.p.resolvedOrder;
+      try { const it = await resolveTrack(t.p); t.item = it || (old && old.trackFound !== false ? old : null); t.status = t.item ? 'ok' : 'notfound'; } catch(err){ t.status = 'error'; }
       save(); renderSets();
     }
   }
   if (ta){
-    const t = set.tracks[+e.target.closest('tr').dataset.t];
-    if (ta === 'similar') openSimilar(t.item);
+    const j = +e.target.closest('tr').dataset.t, t = set.tracks[j];
+    if (ta === 'play') playQueue(set.tracks.map(setTrackItem).map(setQ), j);
+    if (ta === 'like'){ const c = setTrackItem(t); if (!setLiked(set, t)) state.likes.unshift(strip(c)); save(); e.target.classList.add('on'); toast('Geliked: ' + c.artists.map(a => a.name).join(', ') + ' – ' + c.title); }
+    if (ta === 'addpl') openPlMenu(e.target, setTrackItem(t));
+    if (ta === 'similar') openSimilar(setTrackItem(t));
     if (ta === 'edit'){ const inp = e.target.closest('tr').querySelector('[data-fix]'); inp.style.display = ''; inp.focus(); }
   }
 });
