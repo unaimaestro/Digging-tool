@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="47">
+<meta name="dt-version" content="48">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -144,6 +144,7 @@ details.sect:not([open])>summary::before{content:'▸ '}
 .rw img,.rw .ph{width:36px;height:36px;border-radius:4px;object-fit:cover;background:var(--panel2);display:block}
 .tcell{display:block;background:none;border:0;padding:2px 0;color:var(--text);text-align:left;cursor:pointer;font:inherit;min-width:0;width:100%}
 .tcell span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tcell .t{font-weight:600}.tcell .a{color:var(--muted);font-size:12px}
+.alink{cursor:pointer;border-bottom:1px dotted transparent}.alink:hover{color:var(--text);border-bottom-color:currentColor}.tcell span.alink{display:inline}
 .lbl,.tyc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}.lbl{color:#d3c3bb}.rw .bpmc{font-size:12.5px}.rw .score{color:var(--muted);font-size:12px}
 .rw .en{margin-left:0}.acts{display:flex;justify-content:flex-end;gap:2px}
 .ib{width:36px;height:36px;background:none;border:0;border-radius:6px;color:var(--muted);cursor:pointer;font-size:15px;line-height:36px;padding:0;text-align:center}
@@ -2670,7 +2671,7 @@ function recHTML(c, i, ctx){
   const img = c.thumb ? `<img src="${esc(c.thumb)}" loading="lazy" alt="" referrerpolicy="no-referrer"${c.dzAlbumId ? ` data-alb="${+c.dzAlbumId}"` : ''}>` : '<div class="ph"></div>';
   const lab = c.labels.map(l => esc(l.name)).join(', ');
   const title = esc(c.source === 'deezer' ? c.title : c.releaseTitle);
-  const sub = esc(c.artists.map(a => a.name).join(', ')) + (c.source === 'deezer' && c.releaseTitle ? ' · ' + esc(c.releaseTitle) : '');
+  const sub = artLinks(c.artists) + (c.source === 'deezer' && c.releaseTitle ? ' · ' + esc(c.releaseTitle) : '');
   const liked = (state.likes || []).some(l => l.releaseId === c.releaseId);
   return `<div class="rec" data-i="${i}" data-ctx="${ctx}">
     <div class="rw">
@@ -3421,7 +3422,7 @@ function renderPlaylists(){
       <div data-plana="${pl.id}">${plAna[pl.id] || ''}</div>
       <div class="plsug" data-plsug="${pl.id}">${plSugHTML(pl)}</div>
       ${pl.tracks.map((t, i) => `<div class="plrow" data-ti="${i}"><span class="muted small">${i + 1}</span><button class="play" data-pla="playone" title="Preview">▶</button>
-        <span>${esc(t.artist)} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
+        <span>${artLinks(t.artists && t.artists.length ? t.artists : splitArtists(t.artist).map(name => ({name})))} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
         <span class="ctl"><button data-pla="sim" title="Vergelijkbare tracks">≈</button><button data-pla="up" title="Omhoog">↑</button><button data-pla="down" title="Omlaag">↓</button><button data-pla="rm" title="Verwijder">✕</button></span></div><div class="isim plisim" data-isim="${pl.id}-${i}" hidden></div>`).join('') || '<div class="muted small">Nog leeg.</div>'}
     </div>`;
   }).join('') || '<div class="empty">Nog geen playlists.</div>';
@@ -4566,7 +4567,7 @@ async function openDj(name){
   $('#djList').innerHTML = list.slice(0, 150).map((x, i) => `<div class="sr djr" data-i="${i}">
       ${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? '<span></span>' : `<button class="play" data-djp="${i}" aria-label="Speel ${esc(x.title)}">▶</button>`}
       <div class="ph"></div>
-      <div class="n"><b>${esc(x.title)}</b><span>${esc(x.artist)}${x.own ? ' · eigen track' : ''}</span></div>
+      <div class="n"><b>${esc(x.title)}</b><span>${x.artist === 'ID' ? 'ID' : artLinks(splitArtists(x.artist).map(name => ({name})))}${x.own ? ' · eigen track' : ''}</span></div>
       <span class="small">${x.id ? '<span class="chip fit">ID</span> ' : ''}<span class="muted" title="${esc(x.sets.map(s => sets[s].name).join('\n'))}">in ${x.sets.length} set${x.sets.length > 1 ? 's' : ''}</span></span>
       <span class="row" style="gap:4px">${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? `<a class="small" href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" ' + x.artist + ' ID')}" target="_blank" rel="noopener">zoek dit ID</a>` : `<button class="btn small" data-djpl="${i}">+ Playlist</button><button class="btn small primary" data-djr="${i}">Aanbevelingen</button>`}</span>
     </div>`).join('');
@@ -4609,23 +4610,66 @@ $('#searchRecs').addEventListener('click', e => {
   if (r){ const x = djList[+r.dataset.djr]; recsFromHit({artist: x.artist, title: x.title, album: '', thumb: ''}); }
 });
 // their own released tracks, newest first (Deezer)
+// clickable artist names everywhere: open the artist with a playable list of their tracks
+const artLinks = arts => (arts || []).map(a => `<span class="alink" data-artist="${esc(a.name)}"${a.dz ? ` data-dz="${+a.dz}"` : ''} title="Tracks van ${esc(a.name)}">${esc(a.name)}</span>`).join(', ');
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-artist]'); if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  openArtist(a.dataset.artist, +a.dataset.dz || null);
+}, true);
+async function artistTracks(name, id, isLive, onProg){
+  id = id || await dzArtistId(name);
+  if (!id) return null;
+  const items = [], seen = new Set();
+  const push = c => { const k = candKey(c); if (seen.has(k)) return; seen.add(k); items.push(c); };
+  const albs = (((await dz('/artist/' + id + '/albums', {limit: 100}, 864e5)) || {}).data || []).sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')).slice(0, 15);
+  for (let i = 0; i < albs.length; i++){
+    const al = albs[i], full = await dz('/album/' + al.id, {}, 7 * 864e5).catch(() => null);
+    ((full && full.tracks && full.tracks.data) || []).forEach(tr => {
+      if ((tr.artist || {}).id !== id && !djHas(tr.title, name)) return;
+      const c = fromDz(Object.assign({}, tr, {album: {id: al.id, title: al.title, cover_medium: al.cover_medium}}), {label: full.label});
+      c.year = +(al.release_date || '').slice(0, 4) || null; push(c);
+    });
+    if (!isLive()) return null;
+    onProg && onProg((i + 1) / albs.length, items);
+  }
+  // remixes and collaborations on other people's releases
+  try { (((await dz('/artist/' + id + '/top', {limit: 30}, 864e5)) || {}).data || []).forEach(tr => push(fromDz(tr))); } catch(e){}
+  return items;
+}
+async function openArtist(name, dzId){
+  $('#searchRes').hidden = true; showTab('recs'); searchN++; recRun++;
+  const run = ++djRun, box = $('#searchRecs');
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">${esc(name)}</span> <a href="#" id="srClose" class="small">sluiten</a>
+    <div class="row" style="margin-top:6px;gap:6px"><button class="btn small primary" id="arPlay" disabled>▶ Speel alles</button><button class="btn small" id="arDj">Wat draait ${esc(name)}?</button></div>
+    <div class="small muted" id="arMsg" style="margin-top:4px">Tracks zoeken (nieuwste eerst)…</div></summary><div id="arList"></div></details>`;
+  $('#srClose').onclick = ev => { ev.preventDefault(); djRun++; box.innerHTML = ''; };
+  $('#arDj').onclick = () => openDj(name);
+  scrollTo({top: 0, behavior: 'smooth'});
+  const live = () => run === djRun;
+  const show = items => {
+    inlineLists.artist = items;
+    const el = $('#arList'); if (!el) return;
+    el.innerHTML = items.length ? COLHEAD + items.map((c, i) => recHTML(c, i, 'artist')).join('') : '';
+    fillAvailability(el, items); queueEnergy(items); applyDigitalFilter();
+    $('#arPlay').disabled = !items.length;
+  };
+  $('#arPlay').onclick = () => { const it = (inlineLists.artist || []).map(x => ({artist: x.artists.map(a => a.name).join(', '), title: x.title, preview: x.preview, dzTrackId: x.dzTrackId})); if (it.length) playQueue(it, 0); };
+  try {
+    let shown = 0;
+    const items = await artistTracks(name, dzId, live, (f, list) => { if (!live()) return; $('#arMsg').textContent = `Tracks zoeken… ${list.length}`; if (list.length - shown >= 10){ shown = list.length; show(list.slice()); } });
+    if (!live()) return;
+    if (!items){ $('#arMsg').textContent = 'Deze artiest staat niet op Deezer.'; return; }
+    show(items);
+    $('#arMsg').textContent = `${items.length} tracks, nieuwste eerst. Klik ▶ bij een track om vanaf daar te luisteren.`;
+  } catch(e){ if (live()) $('#arMsg').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
 async function djOwn(name, run){
   const el = () => $('#djOwn');
   try {
-    const id = await dzArtistId(name);
-    if (!id){ if (run === djRun && el()) el().innerHTML = '<div class="small muted">Niet gevonden op Deezer.</div>'; return; }
-    const albs = (((await dz('/artist/' + id + '/albums', {limit: 100}, 864e5)) || {}).data || []).sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')).slice(0, 12);
-    const items = [], seen = new Set();
-    for (const al of albs){
-      const full = await dz('/album/' + al.id, {}, 7 * 864e5).catch(() => null);
-      ((full && full.tracks && full.tracks.data) || []).forEach(tr => {
-        if ((tr.artist || {}).id !== id && !djHas(tr.title, name)) return;
-        const c = fromDz(Object.assign({}, tr, {album: {id: al.id, title: al.title, cover_medium: al.cover_medium}}), {label: full.label});
-        c.year = +(al.release_date || '').slice(0, 4) || null;
-        const k = candKey(c); if (seen.has(k)) return; seen.add(k); items.push(c);
-      });
-      if (run !== djRun) return;
-    }
+    const items = await artistTracks(name, null, () => run === djRun);
+    if (run !== djRun) return;
+    if (!items){ if (el()) el().innerHTML = '<div class="small muted">Niet gevonden op Deezer.</div>'; return; }
     inlineLists.djown = items;
     if (el()){ el().innerHTML = items.length ? COLHEAD + items.map((c, i) => recHTML(c, i, 'djown')).join('') : '<div class="small muted">Geen tracks gevonden.</div>'; fillAvailability(el(), items); queueEnergy(items); applyDigitalFilter(); }
   } catch(e){ if (el()) el().innerHTML = `<span class="bad small">${esc(e.message)}</span>`; }
