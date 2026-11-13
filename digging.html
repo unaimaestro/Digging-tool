@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="49">
+<meta name="dt-version" content="50">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -399,8 +399,8 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
       <button class="btn small" id="plNext" title="Volgende (N)">⏭ Volgende</button>
       <button class="btn small" id="plFull" hidden title="Schakel van de 30 seconden preview naar de hele track">Hele track</button>
       <select id="plSrc" class="small" style="width:auto;padding:3px 6px" title="Waar volledige tracks vandaan komen">
-        <option value="auto">Volledig: auto (SoundCloud met waveform eerst)</option><option value="youtube">Volledig: YouTube</option><option value="spotify">Volledig: Spotify</option>
-        <option value="soundcloud">Volledig: SoundCloud</option><option value="deezer">Volledig: Deezer</option><option value="preview">Alleen preview (waveform)</option>
+        <option value="spotify">Alleen Spotify</option><option value="soundcloud">Alleen SoundCloud (waveform)</option><option value="youtube">Alleen YouTube</option>
+        <option value="deezer">Alleen Deezer</option><option value="preview">Alleen preview (waveform)</option><option value="auto">Auto (wisselt zelf tussen platforms)</option>
       </select>
     </div>
     <div id="embedBox">
@@ -2042,6 +2042,7 @@ $('#plFull').onclick = () => switchToFull(playToken);
 $('#plNext').onclick = () => playIndex(qi + 1);
 $('#plSrc').value = state.playerPref || 'auto';
 $('#plSrc').onchange = () => { state.playerPref = $('#plSrc').value; save(); if (queue[qi]) playIndex(qi); };
+if (!$('#plSrc').value) $('#plSrc').value = 'auto';
 window.addEventListener('resize', drawWave);
 document.addEventListener('keydown', e => {
   if (e.target.matches('input,textarea,select') || !$('#player').classList.contains('on') || !eng) return;
@@ -2519,6 +2520,7 @@ async function startNextSource(token){
       return;
     } catch(e){ console.warn(src, e); srcIdx++; if (token !== playToken) return; }
   }
+  { const sp = strictPref(); if (sp){ if (token === playToken) strictMiss(it, sp, `Speelde niet af op ${PLAT[sp]}.`); return; } }
   // nothing started: try YouTube once more if we hadn't looked there yet
   if (token === playToken && it && !lastLinks.youtube && !lastLinks.ytLate){
     lastLinks.ytLate = true;
@@ -2564,8 +2566,32 @@ function loadPrevPeaks(url, token){
   if (!url) return;
   computePeaks(url).then(p => { if (token === playToken && !peaks){ prevPeaks = p; drawWave(); } }).catch(() => {});
 }
-async function playIndex(i){
+// one platform only (unless you choose Auto): no preview first, no switching. If a track isn't there, you choose.
+const PLAT = {spotify: 'Spotify', youtube: 'YouTube', soundcloud: 'SoundCloud', deezer: 'Deezer', preview: 'de preview'};
+let playOnce = null;   // a platform you picked for just this track
+const strictPref = () => { const p = playOnce || state.playerPref || 'auto'; return p !== 'auto' && p !== 'preview' ? p : null; };
+async function linkOn(it, p, L){
+  if (L[p]) return L[p];
+  if (p === 'spotify') return spConnected() ? await spSearch(it.artist, it.title) : null;
+  if (p === 'youtube'){ const y = await ytSearch(it.artist, it.title); return y ? (y.ids || [y.id]) : null; }
+  if (p === 'soundcloud') return await scFind(it);
+  if (p === 'deezer'){ if (it.dzTrackId) return it.dzTrackId; const pv = await findPreview(it.artist, it.title).catch(() => ({})); const m = (pv.deezer || '').match(/track\/(\d+)/); return m ? +m[1] : null; }
+  return null;
+}
+function strictMiss(it, p, why){
+  eng = null; showEmbed(null);
+  $('#plInfo').textContent = '';
+  const alt = ['spotify', 'soundcloud', 'youtube', 'preview'].filter(x => x !== p);
+  $('#plDiag').innerHTML = esc(why) + ' <span style="display:inline-flex;gap:4px;margin-left:6px;flex-wrap:wrap">' + alt.map(x => `<button class="btn small" data-once="${x}">Probeer ${PLAT[x]}</button>`).join('') + '<button class="btn small" data-once="next">Volgende ▸</button></span>';
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-once]'); if (!b) return;
+  if (b.dataset.once === 'next') return playIndex(qi + 1);
+  playOnce = b.dataset.once; playIndex(qi, true);
+});
+async function playIndex(i, keepOnce){
   if (i < 0 || i >= queue.length) return;
+  if (!keepOnce) playOnce = null;
   spSdkActivate();
   qi = i;
   const token = ++playToken;
@@ -2579,11 +2605,25 @@ async function playIndex(i){
   $('#plFull').hidden = true;
   $('#plDiag').textContent = '';
   peaks = null; prevPeaks = null; eng = null; srcList = []; drawWave();
+  const pref = playOnce || state.playerPref || 'auto', strict = strictPref();
+  if (strict){
+    $('#plInfo').textContent = 'Zoeken op ' + PLAT[strict] + '…';
+    const L = (await peekLinks(it).catch(() => null)) || {};
+    if (token !== playToken) return;
+    let v = L[strict];
+    if (!v){ try { v = await within(15000, 'te traag', (res, rej) => linkOn(it, strict, L).then(res, rej)); } catch(e){ v = null; } }
+    if (token !== playToken) return;
+    if (!v){ strictMiss(it, strict, `Niet gevonden op ${PLAT[strict]}${strict === 'spotify' && !spConnected() ? ' (Spotify is niet verbonden, zie Instellingen)' : strict === 'soundcloud' && !scOn() ? ' (SoundCloud is niet verbonden, zie Instellingen)' : ''}.`); return; }
+    srcList = [[strict, v]]; srcIdx = 0; lastLinks = Object.assign({}, L, {[strict]: v});
+    startNextSource(token);
+    previewUrl(it).then(u => loadPrevPeaks(u, token)).catch(() => {});
+    prefetchNext(i, token);
+    return;
+  }
   // your own file first: real waveform of the whole track
   const lx = libLookup(it);
   if (lx && await playLocal(it, lx, token)) return;
   if (token !== playToken) return;
-  const pref = state.playerPref || 'auto';
   if (pref === 'preview'){ playPreview(it, i, ''); return; }
   // full version already known: start it straight away, the bars come from the preview in the background
   const known = await peekLinks(it);
@@ -4179,6 +4219,7 @@ const SC_FIX = 'for f in server.js server.py; do curl -fsSL https://raw.githubus
 const SERVER_WANT = 5;
 async function scInit(){
   try { const r = await fetch('/__info', {cache: 'no-store'}); scInfo = r.ok ? await r.json() : {server: 1}; } catch(e){ scInfo = {server: 0}; }
+  if (scOn() && !state.scDefaulted && (!state.playerPref || state.playerPref === 'auto')){ state.scDefaulted = 1; state.playerPref = 'soundcloud'; $('#plSrc').value = 'soundcloud'; save(); }
   if (scInfo.server >= 5 && scInfo.server < SERVER_WANT) fetch('/__server-update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
   scStatus();
 }
