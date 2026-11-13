@@ -3,7 +3,7 @@
 // Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
 // SoundCloud: with your own SoundCloud app (Client ID + Secret, stored only on this Mac) the tool finds tracks on SoundCloud.
 // The server also keeps itself up to date from GitHub, like the app does.
-const SERVER_VERSION = 3;
+const SERVER_VERSION = 4;
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), os = require('os'), vm = require('vm');
 const DIR = __dirname, PORT = +process.argv[2] || 8765;
 const APP = path.join(DIR, 'digging.html');
@@ -114,6 +114,14 @@ http.createServer((q, s) => {
   if (u === '/__sc/artist'){
     const name = new URL(q.url, 'http://x').searchParams.get('name') || '';
     scArtist(name).then(r => json(s, 200, r), e => json(s, e.status || 500, {error: e.message}));
+    return;
+  }
+  if (u === '/__s79'){
+    // set79.com pages (DJ pages and tracklists only), for "Wat draait deze DJ?"
+    const pth = new URL(q.url, 'http://x').searchParams.get('p') || '';
+    if (!/^\/(dj|tracklist)\/[^?#]+$/.test(pth)) return json(s, 400, {error: 'alleen set79 DJ- en tracklistpagina\'s'});
+    req('https://set79.com' + encodeURI(pth), {headers: {'accept': 'text/html', 'user-agent': 'Mozilla/5.0 (Macintosh) DiggingTool'}})
+      .then(r => { s.writeHead(r.status, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}); s.end(r.body); }, e => json(s, 502, {error: e.message}));
     return;
   }
   if (u === '/__mc'){

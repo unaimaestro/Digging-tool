@@ -1,7 +1,7 @@
 # Digging Tool local server (Python fallback): serves the app and keeps digging-data.json as automatic backup.
 # Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
 import http.server, json, os, sys, re, shutil, datetime, time, base64, urllib.request, urllib.parse, urllib.error
-SERVER_VERSION = 3
+SERVER_VERSION = 4
 DIR = os.path.dirname(os.path.abspath(__file__)); PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 APP = os.path.join(DIR, 'digging.html')
 DATA = os.path.join(DIR, 'digging-data.json'); BK = os.path.join(DIR, 'backups')
@@ -96,6 +96,11 @@ class H(http.server.SimpleHTTPRequestHandler):
             c = read_sc() or {}; return self.reply(200, json.dumps({'server': SERVER_VERSION, 'sc': bool(c.get('id'))}).encode())
         if path == '/__sc/config':
             c = read_sc() or {}; return self.reply(200, json.dumps({'connected': bool(c.get('id')), 'id': c['id'][:4] + '…' if c.get('id') else ''}).encode())
+        if path == '/__s79':
+            pth = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('p', [''])[0]
+            if not re.match(r'^/(dj|tracklist)/[^?#]+$', pth): return self.reply(400, b'{"error":"alleen set79"}')
+            st, b = http_req('https://set79.com' + urllib.parse.quote(pth), None, {'accept': 'text/html', 'user-agent': 'Mozilla/5.0 (Macintosh) DiggingTool'})
+            return self.reply(st or 502, (b or '').encode(), 'text/html; charset=utf-8')
         if path == '/__mc':
             t = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('u', [''])[0]
             if not t.startswith('https://api.mixcloud.com/'): return self.reply(400, b'{"error":"alleen Mixcloud"}')
