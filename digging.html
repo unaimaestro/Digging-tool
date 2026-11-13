@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="48">
+<meta name="dt-version" content="49">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2678,7 +2678,7 @@ function recHTML(c, i, ctx){
       <button class="play" data-act="playrel" title="${c.source === 'deezer' ? 'Speel deze track, daarna de tracks eronder' : 'Speel deze release'}" aria-label="Speel ${title}">▶</button>
       ${img}
       <button class="tcell" data-act="details" aria-expanded="false" title="Details"><span class="t">${title}</span><span class="a">${sub}</span></button>
-      <span class="lbl" title="${lab}">${lab || '–'}</span>
+      <span class="lbl" title="${lab}">${c.labels.length ? labLinks(c.labels) : '–'}</span>
       <span class="bpmc" data-bk="${esc(enKey(c))}">${bpmKeyHTML(c)}</span>
       <span class="enc">${enBadge(c)}</span>
       <span class="tyc">${typeChips(c)}</span>
@@ -3422,7 +3422,7 @@ function renderPlaylists(){
       <div data-plana="${pl.id}">${plAna[pl.id] || ''}</div>
       <div class="plsug" data-plsug="${pl.id}">${plSugHTML(pl)}</div>
       ${pl.tracks.map((t, i) => `<div class="plrow" data-ti="${i}"><span class="muted small">${i + 1}</span><button class="play" data-pla="playone" title="Preview">▶</button>
-        <span>${artLinks(t.artists && t.artists.length ? t.artists : splitArtists(t.artist).map(name => ({name})))} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${esc((t.labels[0] || {}).name || t.releaseTitle || '')}</span></span>
+        <span>${artLinks(t.artists && t.artists.length ? t.artists : splitArtists(t.artist).map(name => ({name})))} – ${esc(t.title)} ${enBadge(t)} ${typeChips(t)}<br><span class="small muted">${(t.labels[0] || {}).name ? labLinks([t.labels[0]]) : esc(t.releaseTitle || '')}</span></span>
         <span class="ctl"><button data-pla="sim" title="Vergelijkbare tracks">≈</button><button data-pla="up" title="Omhoog">↑</button><button data-pla="down" title="Omlaag">↓</button><button data-pla="rm" title="Verwijder">✕</button></span></div><div class="isim plisim" data-isim="${pl.id}-${i}" hidden></div>`).join('') || '<div class="muted small">Nog leeg.</div>'}
     </div>`;
   }).join('') || '<div class="empty">Nog geen playlists.</div>';
@@ -4611,6 +4611,53 @@ $('#searchRecs').addEventListener('click', e => {
 });
 // their own released tracks, newest first (Deezer)
 // clickable artist names everywhere: open the artist with a playable list of their tracks
+const labLinks = labs => (labs || []).filter(l => l && l.name && !/^not on label/i.test(l.name)).map(l => `<span class="alink" data-label="${esc(l.name)}" title="Catalogus van ${esc(l.name)}">${esc(l.name)}</span>`).join(', ');
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-label]'); if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  openLabel(a.dataset.label);
+}, true);
+// a label's catalogue on Deezer: its releases (checked to really be this label), newest first
+async function labelTracks(name, isLive, onProg){
+  const data = ((await dz('/search', {q: `label:"${name}"`, limit: 100}, 864e5)) || {data: []}).data || [];
+  const albums = [...new Set(data.map(t => t.album && t.album.id).filter(Boolean))].slice(0, 25);
+  const rels = [];
+  for (let i = 0; i < albums.length; i++){
+    const a = await dz('/album/' + albums[i], {}, 7 * 864e5).catch(() => null);
+    if (a && labelSame(a.label, name) && genreOk(a)) rels.push(a);
+    if (!isLive()) return null;
+    onProg && onProg((i + 1) / albums.length);
+  }
+  rels.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
+  const items = [], seen = new Set();
+  rels.forEach(a => ((a.tracks && a.tracks.data) || []).forEach(tr => {
+    const c = fromDz(Object.assign({}, tr, {album: {id: a.id, title: a.title, cover_medium: a.cover_medium}}), {label: a.label || name});
+    c.year = +(a.release_date || '').slice(0, 4) || null;
+    const k = candKey(c); if (!seen.has(k)){ seen.add(k); items.push(c); }
+  }));
+  return {items, releases: rels.length};
+}
+async function openLabel(name){
+  $('#searchRes').hidden = true; showTab('recs'); searchN++; recRun++;
+  const run = ++djRun, box = $('#searchRecs');
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Label: ${esc(name)}</span> <a href="#" id="srClose" class="small">sluiten</a>
+    <div class="row" style="margin-top:6px;gap:6px"><button class="btn small primary" id="lbPlay" disabled>▶ Speel alles</button><a class="small" href="https://www.discogs.com/search/?type=label&q=${encodeURIComponent(name)}" target="_blank" rel="noopener">op Discogs</a></div>
+    <div class="small muted" id="lbMsg" style="margin-top:4px">Catalogus zoeken…</div></summary><div id="lbList"></div></details>`;
+  $('#srClose').onclick = ev => { ev.preventDefault(); djRun++; box.innerHTML = ''; };
+  scrollTo({top: 0, behavior: 'smooth'});
+  const live = () => run === djRun;
+  $('#lbPlay').onclick = () => { const it = (inlineLists.label || []).map(x => ({artist: x.artists.map(a => a.name).join(', '), title: x.title, preview: x.preview, dzTrackId: x.dzTrackId})); if (it.length) playQueue(it, 0); };
+  try {
+    const r = await labelTracks(name, live, f => { if (live()) $('#lbMsg').textContent = `Catalogus zoeken… ${Math.round(f * 100)}%`; });
+    if (!live() || !r) return;
+    inlineLists.label = r.items;
+    const el = $('#lbList');
+    el.innerHTML = r.items.length ? COLHEAD + r.items.map((c, i) => recHTML(c, i, 'label')).join('') : '';
+    fillAvailability(el, r.items); queueEnergy(r.items); applyDigitalFilter();
+    $('#lbPlay').disabled = !r.items.length;
+    $('#lbMsg').textContent = r.items.length ? `${r.items.length} tracks van ${r.releases} releases, nieuwste eerst.` : 'Dit label staat (bijna) niet op Deezer. Probeer het op Discogs.';
+  } catch(e){ if (live()) $('#lbMsg').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+}
 const artLinks = arts => (arts || []).map(a => `<span class="alink" data-artist="${esc(a.name)}"${a.dz ? ` data-dz="${+a.dz}"` : ''} title="Tracks van ${esc(a.name)}">${esc(a.name)}</span>`).join(', ');
 document.addEventListener('click', e => {
   const a = e.target.closest('[data-artist]'); if (!a) return;
