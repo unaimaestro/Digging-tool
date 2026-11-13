@@ -3,7 +3,7 @@
 // Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
 // SoundCloud: with your own SoundCloud app (Client ID + Secret, stored only on this Mac) the tool finds tracks on SoundCloud.
 // The server also keeps itself up to date from GitHub, like the app does.
-const SERVER_VERSION = 4;
+const SERVER_VERSION = 5;
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), os = require('os'), vm = require('vm');
 const DIR = __dirname, PORT = +process.argv[2] || 8765;
 const APP = path.join(DIR, 'digging.html');
@@ -105,6 +105,11 @@ setTimeout(serverUpdate, 20000); setInterval(serverUpdate, 3 * 3600e3);
 
 http.createServer((q, s) => {
   const u = decodeURIComponent(q.url.split('?')[0]);
+  if (u === '/__server-update' && q.method === 'POST'){
+    // the page asks for an update check now (only ever pulls server.js from the fixed GitHub address)
+    if (!/application\/json/.test(q.headers['content-type'] || '')) return json(s, 415, {error: 'json'});
+    serverUpdate(); return json(s, 200, {ok: true, server: SERVER_VERSION});
+  }
   if (u === '/__info') return json(s, 200, {server: SERVER_VERSION, sc: !!(readSc() || {}).id});
   if (u === '/__sc/search'){
     const qs = new URL(q.url, 'http://x').searchParams.get('q') || '';
