@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="40">
+<meta name="dt-version" content="41">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -3057,33 +3057,37 @@ async function pushType(k){
 }
 
 /* --- search a track, get recommendations from it --- */
-let searchT = null, searchN = 0, recRun = 0, searchHits = [];
+let searchT = null, searchN = 0, recRun = 0, searchHits = [], searchDjs = [];
 const spToHit = x => ({from: 'Spotify', artist: x.artists.map(a => a.name).join(', '), title: x.name, album: (x.album || {}).name || '', thumb: ((x.album || {}).images || []).slice(-1).map(m => m.url)[0] || '', sp: x.uri});
 const dzToHit = x => ({from: 'Deezer', artist: (x.artist || {}).name || '', title: x.title, album: (x.album || {}).title || '', thumb: (x.album || {}).cover_small || '', dzTrackId: x.id, preview: x.preview, raw: x});
 async function runSearch(q){
   const n = ++searchN, box = $('#searchRes');
   box.hidden = false; box.innerHTML = '<div class="small muted" style="padding:8px">Zoeken…</div>';
-  const [sp, dzr] = await Promise.all([
+  const [sp, dzr, dza] = await Promise.all([
     spConnected() ? spWeb('/search?type=track&limit=8&q=' + encodeURIComponent(q)).then(d => ((d.tracks || {}).items || []).map(spToHit)).catch(() => []) : [],
     dz('/search', {q, limit: 8}, 36e5).then(d => ((d || {}).data || []).map(dzToHit)).catch(() => []),
+    dz('/search/artist', {q, limit: 5}, 36e5).then(d => ((d || {}).data || []).filter(a => norm(a.name).startsWith(norm(q)) || norm(q).startsWith(norm(a.name))).slice(0, 2)).catch(() => []),
   ]);
   if (n !== searchN) return;
   const seen = new Set();
   searchHits = sp.concat(dzr).filter(h => { const k = norm(h.artist) + '|' + titleCore(cleanTitle(h.title)); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 12);
-  box.innerHTML = searchHits.length ? searchHits.map((h, i) => `<div class="sr">
+  searchDjs = dza.length ? dza.map(a => a.name) : [q];
+  const djRows = searchDjs.map((n, i) => `<div class="sr"><span></span><div class="ph"></div><div class="n"><b>Wat draait ${esc(n)}?</b><span>Tracks uit tracklists van hun sets, met ID's, en hun eigen tracks</span></div><span class="small muted">Artiest</span><button class="btn small primary" data-srdj="${i}">Bekijk</button></div>`).join('');
+  box.innerHTML = djRows + (searchHits.length ? searchHits.map((h, i) => `<div class="sr">
       <button class="play" data-srp="${i}" aria-label="Speel ${esc(h.title)}">▶</button>
       ${h.thumb ? `<img src="${esc(h.thumb)}" alt="" referrerpolicy="no-referrer">` : '<div class="ph"></div>'}
       <div class="n"><b>${esc(h.title)}</b><span>${esc(h.artist)}${h.album ? ' · ' + esc(h.album) : ''}</span></div>
       <span class="small muted">${h.from}</span>
       <button class="btn small primary" data-srr="${i}">Aanbevelingen</button>
-    </div>`).join('') : '<div class="small muted" style="padding:8px">Niets gevonden.</div>';
+    </div>`).join('') : '');
 }
 $('#searchQ').addEventListener('input', e => { clearTimeout(searchT); const q = e.target.value.trim(); if (q.length < 2){ searchN++; $('#searchRes').hidden = true; return; } searchT = setTimeout(() => runSearch(q), 300); });
 $('#searchQ').addEventListener('focus', () => { if ($('#searchRes').innerHTML && $('#searchQ').value.trim().length >= 2) $('#searchRes').hidden = false; });
 $('#searchQ').addEventListener('keydown', e => { if (e.key === 'Escape') $('#searchRes').hidden = true; if (e.key === 'Enter' && searchHits[0]){ e.preventDefault(); recsFromHit(searchHits[0]); } });
 document.addEventListener('click', e => { if (!e.target.closest('#searchWrap')) $('#searchRes').hidden = true; });
 $('#searchRes').addEventListener('click', e => {
-  const p = e.target.closest('[data-srp]'), r = e.target.closest('[data-srr]');
+  const p = e.target.closest('[data-srp]'), r = e.target.closest('[data-srr]'), dj = e.target.closest('[data-srdj]');
+  if (dj) return openDj(searchDjs[+dj.dataset.srdj]);
   if (p){ const h = searchHits[+p.dataset.srp]; playQueue([{artist: h.artist, title: h.title, preview: h.preview, dzTrackId: h.dzTrackId}], 0); openHit(h); }
   if (r) recsFromHit(searchHits[+r.dataset.srr]);
 });
@@ -3107,7 +3111,7 @@ function renderHit(item, withRecs){
 async function openHit(h){
   $('#searchRes').hidden = true;
   showTab('recs');
-  const box = $('#searchRecs'), run = ++recRun;
+  const box = $('#searchRecs'), run = ++recRun; djRun++;
   box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Gezocht: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a></summary><div id="srSeed"><div class="small muted">Laden…</div></div><button class="btn small primary" id="srRecs" style="margin-top:8px">Aanbevelingen voor deze track</button></details>`;
   $('#srClose').onclick = ev => { ev.preventDefault(); recRun++; box.innerHTML = ''; };
   $('#srRecs').onclick = () => recsFromHit(h);
@@ -3119,7 +3123,7 @@ async function recsFromHit(h){
   $('#searchRes').hidden = true;
   showTab('recs');
   searchN++;
-  const box = $('#searchRecs'), run = ++recRun;
+  const box = $('#searchRecs'), run = ++recRun; djRun++;
   box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Lijkt op: ${esc(h.artist)} – ${esc(h.title)}</span> <a href="#" id="srClose" class="small">sluiten</a><div class="small muted" id="srMsg">Zoeken…</div></summary><div id="srSeed"></div><div class="progress" id="srProg"><div></div></div><div id="srList"></div></details>`;
   $('#srClose').onclick = ev => { ev.preventDefault(); recRun++; box.innerHTML = ''; };
   scrollTo({top: 0, behavior: 'smooth'});
@@ -4375,6 +4379,160 @@ $('#libPick').onclick = async () => {
 $('#libInput').onchange = e => { const f = [...e.target.files]; if (f.length) libScan(f); };
 $('#libRescan').onclick = () => { if (libDir) libScan(); else if (libFiles.size) libScan([...libFiles.values()]); else $('#libPick').click(); };
 libInit();
+
+/* ================= What does this DJ play? =================
+   Type an artist: the tool collects tracklists of their sets that are online (Mixcloud, and with your keys
+   SoundCloud and YouTube descriptions) and shows what they play, IDs included, plus their own newest tracks. */
+const ID_RE = /^(id|i\.d\.|\?+|unknown( artist)?|unreleased|untitled( id)?)$/i;
+const isIdPart = s => ID_RE.test(String(s || '').replace(/[()\[\]]/g, '').trim());
+// a block of text is a tracklist when several lines look like "Artist - Title"
+function tracklistFrom(text){
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(l => {
+    l = l.replace(/^[\s•*·▪►▶♫♪-]+/, '').trim();
+    if (l.length < 5 || l.length > 160 || /https?:\/\//.test(l) || !/\s[-–—]\s/.test(l)) return;
+    const p = parseLine(l); if (!p || !p.artist || !p.title) return;
+    out.push({artist: p.artist.trim(), title: p.title.trim(), label: p.label || ''});
+  });
+  return out.length >= 4 ? out : [];
+}
+const djHas = (txt, name) => (' ' + norm(txt) + ' ').includes(' ' + norm(name) + ' ');
+async function mcJSON(url){
+  return (await fetchJSON(url, 8000)) || (await fetchJSON('/__mc?u=' + encodeURIComponent(url), 10000));
+}
+async function djFromMixcloud(name, note){
+  const sets = [];
+  const d = await mcJSON('https://api.mixcloud.com/search/?type=cloudcast&limit=30&q=' + encodeURIComponent(name));
+  if (!d || !d.data){ note('Mixcloud niet bereikbaar'); return sets; }
+  const cands = d.data.filter(c => djHas((c.name || '') + ' ' + ((c.user || {}).name || ''), name)).slice(0, 15);
+  for (const c of cands){
+    const det = await mcJSON('https://api.mixcloud.com' + c.key);
+    const secs = (det && det.sections || []).filter(s => s.track && s.track.name);
+    let tracks = secs.map(s => ({artist: ((s.track.artist || {}).name || '').trim(), title: s.track.name.trim()}));
+    if (!tracks.length) tracks = tracklistFrom(det && det.description);
+    if (tracks.length) sets.push({src: 'Mixcloud', name: c.name, url: c.url, date: (c.created_time || '').slice(0, 10), tracks});
+  }
+  note('Mixcloud: ' + cands.length + ' sets bekeken, ' + sets.length + ' met tracklist');
+  return sets;
+}
+async function djFromSoundCloud(name, note){
+  if (!scOn()){ note('SoundCloud: niet verbonden'); return []; }
+  let r = await fetchJSON('/__sc/artist?name=' + encodeURIComponent(name), 20000);
+  if (!r){ const l = await fetchJSON('/__sc/search?limit=50&q=' + encodeURIComponent(name + ' mix'), 12000); r = {own: [], other: l || []}; }
+  const all = (r.own || []).concat((r.other || []).filter(x => djHas(x.title + ' ' + x.user, name)));
+  const seen = new Set(), sets = [];
+  all.filter(x => x.dur > 20 * 60000 && !seen.has(x.url) && seen.add(x.url)).forEach(x => {
+    const tracks = tracklistFrom(x.desc);
+    if (tracks.length) sets.push({src: 'SoundCloud', name: x.title, url: x.url, date: (x.created || '').slice(0, 10), tracks});
+  });
+  note('SoundCloud: ' + sets.length + ' sets met tracklist' + (r.own || r.other ? '' : ''));
+  return sets;
+}
+async function djFromYouTube(name, note){
+  const sets = [], q = name + ' set';
+  let vids = [];
+  if (state.ytKey){
+    const k = encodeURIComponent(state.ytKey);
+    const s = await fetchJSON('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=long&maxResults=25&q=' + encodeURIComponent(q) + '&key=' + k);
+    const ids = s ? (s.items || []).filter(x => djHas(x.snippet.title, name)).map(x => x.id.videoId).slice(0, 15) : [];
+    if (ids.length){
+      const v = await fetchJSON('https://www.googleapis.com/youtube/v3/videos?part=snippet&id=' + ids.join(',') + '&key=' + k);
+      vids = v ? (v.items || []).map(x => ({id: x.id, title: x.snippet.title, date: (x.snippet.publishedAt || '').slice(0, 10), desc: x.snippet.description})) : [];
+    }
+  } else {
+    for (const base of INVID){
+      const s = await fetchJSON(base + '/api/v1/search?type=video&duration=long&q=' + encodeURIComponent(q), 6000);
+      if (!Array.isArray(s)) continue;
+      const ids = s.filter(x => x.videoId && djHas(x.title, name)).slice(0, 10);
+      for (const x of ids){ const v = await fetchJSON(base + '/api/v1/videos/' + x.videoId, 6000); if (v) vids.push({id: x.videoId, title: x.title, date: v.published ? new Date(v.published * 1000).toISOString().slice(0, 10) : '', desc: v.description}); }
+      break;
+    }
+  }
+  vids.forEach(v => { const tracks = tracklistFrom(v.desc); if (tracks.length) sets.push({src: 'YouTube', name: v.title, url: 'https://www.youtube.com/watch?v=' + v.id, date: v.date, tracks}); });
+  note('YouTube: ' + sets.length + ' sets met tracklist' + (state.ytKey ? '' : ' (zonder YouTube-sleutel: minder betrouwbaar)'));
+  return sets;
+}
+// count every track over all sets; IDs stay visible
+function djAggregate(name, sets){
+  const m = new Map(); let blind = 0;
+  sets.forEach((s, si) => {
+    const done = new Set();
+    s.tracks.forEach(t => {
+      const idA = isIdPart(t.artist), idT = isIdPart(cleanTitle(t.title)) || /\bunreleased\b/i.test(t.title);
+      if (idA && idT){ blind++; return; }
+      const k = (idA ? '?' : norm(splitArtists(t.artist)[0] || t.artist)) + '|' + (idT ? 'id' : titleCore(cleanTitle(t.title)));
+      if (done.has(k)) return; done.add(k);
+      const x = m.get(k) || {artist: idA ? 'ID' : t.artist, title: t.title, id: idA || idT, own: djHas(t.artist, name), sets: []};
+      x.sets.push(si); m.set(k, x);
+    });
+  });
+  const list = [...m.values()].sort((a, b) => b.sets.length - a.sets.length || (b.id - a.id));
+  return {list, blind};
+}
+let djRun = 0, djList = [], djSets = [];
+async function openDj(name){
+  $('#searchRes').hidden = true; showTab('recs'); searchN++;
+  const run = ++djRun, box = $('#searchRecs'); recRun++;
+  box.innerHTML = `<details class="sect" open style="margin-bottom:14px"><summary><span class="st">Wat draait ${esc(name)}?</span> <a href="#" id="srClose" class="small">sluiten</a><div class="small muted" id="djMsg">Tracklists van sets zoeken…</div></summary>
+    <div id="djList"></div>
+    <details style="margin-top:12px"><summary class="small"><b>Sets waar dit uit komt</b></summary><div id="djSets" class="small"></div></details>
+    <details style="margin-top:8px"><summary class="small"><b>Eigen tracks van ${esc(name)}</b> (nieuwste eerst)</summary><div id="djOwn"><div class="small muted">Laden…</div></div></details>
+    <div class="small muted" style="margin-top:10px">Meer tracklists: <a href="https://www.1001tracklists.com/search/result.php?main_search=${encodeURIComponent(name)}" target="_blank" rel="noopener">1001Tracklists</a> · <a href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" tracklist')}" target="_blank" rel="noopener">Google</a>. Plak een tracklist bij Sets om hem mee te nemen in je profiel.</div></details>`;
+  $('#srClose').onclick = ev => { ev.preventDefault(); djRun++; box.innerHTML = ''; };
+  scrollTo({top: 0, behavior: 'smooth'});
+  djOwn(name, run);
+  const key = 'djp:' + norm(name), hit = await idb.get(key);
+  let sets, notes = [];
+  if (hit && Date.now() - hit.t < 3 * 864e5){ sets = hit.d.sets; notes = hit.d.notes; }
+  else {
+    const note = t => { notes.push(t); if (run === djRun && $('#djMsg')) $('#djMsg').textContent = 'Zoeken… ' + notes.join(' · '); };
+    const parts = await Promise.all([djFromMixcloud(name, note), djFromSoundCloud(name, note), djFromYouTube(name, note)].map(p => p.catch(() => [])));
+    sets = parts.flat();
+    const seenSet = new Set(); sets = sets.filter(s => { const k = norm(s.name); if (seenSet.has(k)) return false; seenSet.add(k); return true; });
+    if (sets.length) idb.set(key, {t: Date.now(), d: {sets, notes}});
+  }
+  if (run !== djRun) return;
+  const {list, blind} = djAggregate(name, sets);
+  djList = list; djSets = sets;
+  $('#djMsg').textContent = sets.length ? `${list.length} tracks uit ${sets.length} sets met tracklist${blind ? `, plus ${blind} volledig onbekende ID's` : ''}. ${notes.join(' · ')}`
+    : `Geen tracklists gevonden. ${notes.join(' · ')}`;
+  $('#djList').innerHTML = list.slice(0, 150).map((x, i) => `<div class="sr djr">
+      ${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? '<span></span>' : `<button class="play" data-djp="${i}" aria-label="Speel ${esc(x.title)}">▶</button>`}
+      <div class="ph"></div>
+      <div class="n"><b>${esc(x.title)}</b><span>${esc(x.artist)}${x.own ? ' · eigen track' : ''}</span></div>
+      <span class="small">${x.id ? '<span class="chip fit">ID</span> ' : ''}<span class="muted" title="${esc(x.sets.map(s => sets[s].name).join('\n'))}">in ${x.sets.length} set${x.sets.length > 1 ? 's' : ''}</span></span>
+      <span class="row" style="gap:4px">${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? `<a class="small" href="https://www.google.com/search?q=${encodeURIComponent('"' + name + '" ' + x.artist + ' ID')}" target="_blank" rel="noopener">zoek dit ID</a>` : `<button class="btn small" data-djpl="${i}">+ Playlist</button><button class="btn small primary" data-djr="${i}">Aanbevelingen</button>`}</span>
+    </div>`).join('');
+  $('#djSets').innerHTML = sets.map(s => `<div><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a> <span class="muted">${s.src}${s.date ? ' · ' + s.date : ''} · ${s.tracks.length} tracks</span></div>`).join('') || '<span class="muted">Geen.</span>';
+}
+$('#searchRecs').addEventListener('click', e => {
+  const p = e.target.closest('[data-djp]'), pl = e.target.closest('[data-djpl]'), r = e.target.closest('[data-djr]');
+  if (p){ const from = +p.dataset.djp; const items = djList.slice(from).filter(x => x.artist !== 'ID' && !isIdPart(cleanTitle(x.title))).map(x => ({artist: x.artist, title: x.title})); playQueue(items, 0); }
+  if (pl){ const x = djList[+pl.dataset.djpl]; hitToItem({artist: x.artist, title: x.title, album: '', thumb: ''}).then(c => openPlMenu(pl, c)); }
+  if (r){ const x = djList[+r.dataset.djr]; recsFromHit({artist: x.artist, title: x.title, album: '', thumb: ''}); }
+});
+// their own released tracks, newest first (Deezer)
+async function djOwn(name, run){
+  const el = () => $('#djOwn');
+  try {
+    const id = await dzArtistId(name);
+    if (!id){ if (run === djRun && el()) el().innerHTML = '<div class="small muted">Niet gevonden op Deezer.</div>'; return; }
+    const albs = (((await dz('/artist/' + id + '/albums', {limit: 100}, 864e5)) || {}).data || []).sort((a, b) => (b.release_date || '').localeCompare(a.release_date || '')).slice(0, 12);
+    const items = [], seen = new Set();
+    for (const al of albs){
+      const full = await dz('/album/' + al.id, {}, 7 * 864e5).catch(() => null);
+      ((full && full.tracks && full.tracks.data) || []).forEach(tr => {
+        if ((tr.artist || {}).id !== id && !djHas(tr.title, name)) return;
+        const c = fromDz(Object.assign({}, tr, {album: {id: al.id, title: al.title, cover_medium: al.cover_medium}}), {label: full.label});
+        c.year = +(al.release_date || '').slice(0, 4) || null;
+        const k = candKey(c); if (seen.has(k)) return; seen.add(k); items.push(c);
+      });
+      if (run !== djRun) return;
+    }
+    inlineLists.djown = items;
+    if (el()){ el().innerHTML = items.length ? COLHEAD + items.map((c, i) => recHTML(c, i, 'djown')).join('') : '<div class="small muted">Geen tracks gevonden.</div>'; fillAvailability(el(), items); queueEnergy(items); applyDigitalFilter(); }
+  } catch(e){ if (el()) el().innerHTML = `<span class="bad small">${esc(e.message)}</span>`; }
+}
 
 hpInit();
 // get the in-app Spotify player ready in the background, so the first click can start sound right away

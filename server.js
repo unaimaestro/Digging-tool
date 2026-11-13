@@ -3,7 +3,7 @@
 // Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
 // SoundCloud: with your own SoundCloud app (Client ID + Secret, stored only on this Mac) the tool finds tracks on SoundCloud.
 // The server also keeps itself up to date from GitHub, like the app does.
-const SERVER_VERSION = 2;
+const SERVER_VERSION = 3;
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), os = require('os'), vm = require('vm');
 const DIR = __dirname, PORT = +process.argv[2] || 8765;
 const APP = path.join(DIR, 'digging.html');
@@ -60,16 +60,28 @@ async function scToken(cfg, force){
   writeSc(cfg);
   return cfg.token;
 }
-async function scSearch(q){
+async function scApi(pathq){
   const cfg = readSc(); if (!cfg || !cfg.id) { const e = new Error('niet verbonden'); e.status = 412; throw e; }
-  const url = 'https://api.soundcloud.com/tracks?limit=20&access=playable&q=' + encodeURIComponent(q);
+  const url = 'https://api.soundcloud.com' + pathq;
   const get = async force => req(url, {headers: {'Authorization': 'OAuth ' + await scToken(cfg, force), 'accept': 'application/json; charset=utf-8'}});
   let r = await get(false);
   if (r.status === 401) r = await get(true);
   if (r.status !== 200){ const e = new Error('SoundCloud gaf HTTP ' + r.status); e.status = 502; throw e; }
-  let list = JSON.parse(r.body); if (list && list.collection) list = list.collection;
-  return (list || []).map(t => ({id: t.id, title: t.title, user: (t.user || {}).username || '', artist: (t.publisher_metadata || {}).artist || '',
-    url: t.permalink_url, dur: t.duration, full: t.full_duration || t.duration, access: t.access, waveform: t.waveform_url}));
+  const d = JSON.parse(r.body); return d && d.collection ? d.collection : (d || []);
+}
+const scSlim = t => ({id: t.id, title: t.title, user: (t.user || {}).username || '', userUrl: (t.user || {}).permalink_url || '', artist: (t.publisher_metadata || {}).artist || '',
+  url: t.permalink_url, dur: t.duration, full: t.full_duration || t.duration, access: t.access, waveform: t.waveform_url, created: t.created_at || '', release: t.release_date || '', label: t.label_name || '', art: t.artwork_url || '', desc: String(t.description || '').slice(0, 6000)});
+async function scSearch(q, limit = 20){
+  return (await scApi('/tracks?limit=' + Math.min(50, limit) + '&access=playable&q=' + encodeURIComponent(q))).map(scSlim);
+}
+// an artist: their own SoundCloud account (if a name matches exactly) with its uploads, plus tracks by others that name them
+async function scArtist(name){
+  const nn = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '');
+  const users = await scApi('/users?limit=10&q=' + encodeURIComponent(name)).catch(() => []);
+  const u = users.find(x => nn(x.username) === nn(name) || nn(x.full_name) === nn(name) || nn(x.permalink) === nn(name)) || null;
+  const own = u ? (await scApi('/users/' + (u.urn || u.id) + '/tracks?limit=100&access=playable').catch(() => [])).map(scSlim) : [];
+  const other = await scSearch(name, 50).catch(() => []);
+  return {user: u ? {name: u.username, url: u.permalink_url} : null, own, other};
 }
 const json = (s, code, o) => { s.writeHead(code, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); s.end(JSON.stringify(o)); };
 function readBody(q, max, cb){ let b = ''; q.on('data', c => { b += c; if (b.length > max) q.destroy(); }); q.on('end', () => cb(b)); }
@@ -96,7 +108,19 @@ http.createServer((q, s) => {
   if (u === '/__info') return json(s, 200, {server: SERVER_VERSION, sc: !!(readSc() || {}).id});
   if (u === '/__sc/search'){
     const qs = new URL(q.url, 'http://x').searchParams.get('q') || '';
-    scSearch(qs).then(r => json(s, 200, r), e => json(s, e.status || 500, {error: e.message}));
+    scSearch(qs, +new URL(q.url, 'http://x').searchParams.get('limit') || 20).then(r => json(s, 200, r), e => json(s, e.status || 500, {error: e.message}));
+    return;
+  }
+  if (u === '/__sc/artist'){
+    const name = new URL(q.url, 'http://x').searchParams.get('name') || '';
+    scArtist(name).then(r => json(s, 200, r), e => json(s, e.status || 500, {error: e.message}));
+    return;
+  }
+  if (u === '/__mc'){
+    // Mixcloud API pass-through (only api.mixcloud.com), for when the browser can't reach it directly
+    const t = new URL(q.url, 'http://x').searchParams.get('u') || '';
+    if (!/^https:\/\/api\.mixcloud\.com\//.test(t)) return json(s, 400, {error: 'alleen Mixcloud'});
+    req(t, {headers: {'accept': 'application/json'}}).then(r => { s.writeHead(r.status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); s.end(r.body); }, e => json(s, 502, {error: e.message}));
     return;
   }
   if (u === '/__sc/config'){
