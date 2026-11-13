@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="39">
+<meta name="dt-version" content="40">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -574,6 +574,17 @@ function norm(s){
 const lk = s => norm(s).replace(/\b(records?|recordings|music|label|ltd|digital|rec)\b/g, ' ').replace(/\s+/g, ' ').trim() || norm(s);
 const titleCore = s => norm((s || '').replace(/\(.*?\)|\[.*?\]/g, ''));
 const GENERIC_STYLES = new Set(['Techno','House','Electro','Experimental','Ambient']);
+// Cover art that won't load: try the other Deezer image host, then without referrer, then show the empty square instead of a broken icon
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || img.closest('#player')) return;
+  const n = +(img.dataset.retry || 0); img.dataset.retry = n + 1;
+  const src = img.getAttribute('src') || '';
+  if (n === 0 && /dzcdn\.net/.test(src)){ img.src = /e-cdns-images\./.test(src) ? src.replace('e-cdns-images.', 'cdn-images.') : src.replace(/\/\/[\w-]*images\.dzcdn/, '//e-cdns-images.dzcdn'); return; }
+  if (img.referrerPolicy !== 'no-referrer'){ img.referrerPolicy = 'no-referrer'; img.src = src; return; }
+  if (img.dataset.alb && !img.dataset.albTried){ img.dataset.albTried = 1; img.src = 'https://api.deezer.com/album/' + img.dataset.alb + '/image'; return; }
+  const ph = document.createElement('div'); ph.className = 'ph'; img.replaceWith(ph);
+}, true);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const VERSION_RE = /\b(mix|remix|version|rework|edit|dub|interpretation|vip|reshape|remaster(ed)?)\b/i;
@@ -2637,7 +2648,7 @@ function links(c){
 }
 const COLHEAD = '<div class="colhead"><span></span><span></span><span>Track</span><span class="lbl">Label</span><span class="r">BPM</span><span>Energie</span><span class="tyc">Type</span><span class="r score">Match</span><span></span></div>';
 function recHTML(c, i, ctx){
-  const img = c.thumb ? `<img src="${esc(c.thumb)}" loading="lazy" alt="">` : '<div class="ph"></div>';
+  const img = c.thumb ? `<img src="${esc(c.thumb)}" loading="lazy" alt="" referrerpolicy="no-referrer"${c.dzAlbumId ? ` data-alb="${+c.dzAlbumId}"` : ''}>` : '<div class="ph"></div>';
   const lab = c.labels.map(l => esc(l.name)).join(', ');
   const title = esc(c.source === 'deezer' ? c.title : c.releaseTitle);
   const sub = esc(c.artists.map(a => a.name).join(', ')) + (c.source === 'deezer' && c.releaseTitle ? ' · ' + esc(c.releaseTitle) : '');
@@ -3061,7 +3072,7 @@ async function runSearch(q){
   searchHits = sp.concat(dzr).filter(h => { const k = norm(h.artist) + '|' + titleCore(cleanTitle(h.title)); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 12);
   box.innerHTML = searchHits.length ? searchHits.map((h, i) => `<div class="sr">
       <button class="play" data-srp="${i}" aria-label="Speel ${esc(h.title)}">▶</button>
-      ${h.thumb ? `<img src="${esc(h.thumb)}" alt="">` : '<div class="ph"></div>'}
+      ${h.thumb ? `<img src="${esc(h.thumb)}" alt="" referrerpolicy="no-referrer">` : '<div class="ph"></div>'}
       <div class="n"><b>${esc(h.title)}</b><span>${esc(h.artist)}${h.album ? ' · ' + esc(h.album) : ''}</span></div>
       <span class="small muted">${h.from}</span>
       <button class="btn small primary" data-srr="${i}">Aanbevelingen</button>
