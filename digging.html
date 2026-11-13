@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="46">
+<meta name="dt-version" content="47">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -243,6 +243,7 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
   <div class="progress" id="genProg" hidden><div></div></div>
   <div class="row" id="promptRow" style="margin-bottom:6px"><input id="promptQ" class="grow" type="search" autocomplete="off" placeholder="Beschrijf wat je zoekt, bijv. underground sexy house, niet te hard"><button class="btn primary" id="promptGo">Zoek</button></div>
   <div class="small" id="promptMsg" style="margin-bottom:6px"></div>
+  <div class="small muted" id="learnInfo" style="margin-bottom:4px"></div>
   <div class="small muted" id="genMsg" style="margin-bottom:8px"></div>
   <div class="toolbar" id="pushBar"></div>
   <div class="toolbar" id="viewTabs"></div>
@@ -783,8 +784,9 @@ function buildProfile(T){
     if (item.year) P.years.push(item.year);
   };
   state.sets.forEach(set => set.tracks.forEach(t => { if (t.item){ add(t.item, tw(t.item)); markSeen(P, t.item); } }));
-  state.likes.forEach(l => { add(l, 1.5); markSeen(P, l); });
-  plTracksAll().forEach(t => { add(t, 1.2); markSeen(P, t); });
+  // likes and playlist tracks are strong signals: more of these artists/labels
+  state.likes.forEach(l => { add(l, 2.5); markSeen(P, l); });
+  plTracksAll().forEach(t => { add(t, 2); markSeen(P, t); });
   if (HOUSE && state.hp){
     // house: your profile tracks are the seeds (the ones you confirmed count a bit more); doubtful ones only count as "already known"
     // tracks that match the words you typed (sexy, donker, …) count three times as much
@@ -1107,8 +1109,8 @@ async function generateRecs(mode = {}){
   let fits = 0, dropped = 0;
   const TM = trainModel();
   recs.forEach(c => {
-    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []}, h = hpFit(c), tr = TM.n ? trainFit(c, TM) : {f: 1, why: []};
-    c.sound = m.f; c.fit = r.f; c.fitWhy = (h.why ? r.why.concat(h.why) : r.why).concat(tr.why);
+    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []}, h = hpFit(c), tr = TM.n || TM.rows.length ? trainFit(c, TM) : {f: 1, why: []};
+    c.sound = m.f; c.fit = r.f; c.fitWhy = h.why ? r.why.concat(h.why) : r.why; if (tr.why.length) c.why = (c.why || []).filter(w => !/^klinkt als|afwees/.test(w)).concat(tr.why);
     c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f * h.f * tr.f;
     if (r.f >= 1.2) fits++;
   });
@@ -2649,6 +2651,7 @@ function makeProg(bar, msg){
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 function showTab(t){
+  if (t === 'recs' && typeof learnInfo === 'function') try { learnInfo(); } catch(e){}
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + t));
   $('#sideFilters').style.display = t === 'recs' ? '' : 'none';
@@ -4651,8 +4654,11 @@ function trainWords(){
 // sound + words: how close a candidate is to the tracks you said yes / no to
 let tjCache = null;
 function trainModel(){
-  const J = Object.values(trainJudged()), rows = [];
-  J.forEach(j => { const e = state.energy[j.ek]; if (e && e.ft) rows.push({v: j.v, ft: e.ft}); });
+  const J = Object.values(trainJudged()), rows = [], seen = new Set();
+  J.forEach(j => { const e = state.energy[j.ek]; if (e && e.ft){ rows.push({v: j.v, w: 1, ft: e.ft, src: 'train'}); seen.add(j.ek); } });
+  // likes and playlist tracks count as a "yes" for the sound too
+  (state.likes || []).filter(l => l && l.artists && l.artists.length).forEach(l => { const k = enKey(l), e = state.energy[k]; if (e && e.ft && !seen.has(k)){ rows.push({v: 1, w: 1, ft: e.ft, src: 'like'}); seen.add(k); } });
+  plTracksAll().forEach(t => { const k = enKey(t), e = state.energy[k]; if (e && e.ft && !seen.has(k)){ rows.push({v: 1, w: 0.8, ft: e.ft, src: 'pl'}); seen.add(k); } });
   const sd = {};
   FT_KEYS.forEach(k => { const v = rows.map(r => r.ft[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1); sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
   return tjCache = {rows, sd, W: trainWords(), n: J.length};
@@ -4662,12 +4668,14 @@ function trainFit(c, M){
   let f = 1; const why = [];
   const e = state.energy[enKey(c)];
   if (e && e.ft && M.rows.length >= 6){
-    const near = M.rows.map(r => ({v: r.v, d: FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - r.ft[k]) / M.sd[k])), 0) / FT_KEYS.length}))
+    const near = M.rows.map(r => ({v: r.v, w: r.w, src: r.src, d: FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - r.ft[k]) / M.sd[k])), 0) / FT_KEYS.length}))
       .sort((a, b) => a.d - b.d).slice(0, 5);
-    let s = 0, w = 0; near.forEach(n => { const x = 1 / (0.3 + n.d); s += n.v * x; w += x; });
+    let s = 0, w = 0; near.forEach(n => { const x = n.w / (0.3 + n.d); s += n.v * x; w += x; });
     const vote = w ? s / w : 0;
     f *= 1 + 0.6 * vote;
-    if (vote > 0.4) why.push('klinkt als tracks die je goed vond'); else if (vote < -0.4) why.push('klinkt als tracks die je afwees');
+    const src = near[0] && near[0].d < 0.8 ? near[0].src : null;
+    if (vote > 0.4) why.push(src === 'like' ? 'klinkt als je likes' : src === 'pl' ? 'klinkt als je playlists' : 'klinkt als tracks die je goed vond');
+    else if (vote < -0.4) why.push('klinkt als tracks die je afwees');
   }
   const t = typesOf(c) || [];
   t.forEach(k => { const v = M.W.types[k] || 0; if (v >= 2) f *= 1.12; else if (v <= -2){ f *= 0.8; why.push('type dat je vaak afwees'); } });
@@ -4759,7 +4767,13 @@ function trainClose(keep){
   $('#trainBox').hidden = true;
   trainButton();
 }
+function learnInfo(){
+  const el = $('#learnInfo'); if (!el) return;
+  const J = Object.values(trainJudged()), y = J.filter(j => j.v === 1).length, n = J.filter(j => j.v === -1).length;
+  el.textContent = `Leert van: ${J.length} trainingsoordelen (${y} ja, ${n} nee) · ${state.likes.length} likes · ${plTracksAll().length} playlisttracks. Bij elke aanbeveling zie je onder Details waarom.`;
+}
 function trainButton(){
+  learnInfo();
   const b = $('#trainBtn'); if (!b) return;
   const T = state.train, left = T && T.batch && T.batch.length ? T.batch.length - (T.i || 0) : 0;
   b.textContent = left > 0 ? `Verder met trainen (${left} over)` : 'Train de tool (50 tracks)';
@@ -4779,7 +4793,7 @@ if (SERVED){
       const added = mergeData(d);
       if (added){ localStorage.setItem(LS_KEY, JSON.stringify(state)); toast(added + ' sets/likes/playlists teruggezet uit je back-up'); renderRecs(); refreshStyleFilter(); if (HOUSE){ renderTypeChips(); renderHouse(); } }
     }
-  }).catch(() => {}).finally(() => { backupReady = true; scheduleBackup(); $('#bkMsg') && ($('#bkMsg').textContent = 'Automatische back-up staat aan: digging-data.json in je app-map.'); });
+  }).catch(() => {}).finally(() => { try { trainButton(); } catch(e){} backupReady = true; scheduleBackup(); $('#bkMsg') && ($('#bkMsg').textContent = 'Automatische back-up staat aan: digging-data.json in je app-map.'); });
 }
 // Spotify only accepts 127.0.0.1 (not "localhost"). Browsers keep data per address, so move everything over automatically.
 (function migrate(){
