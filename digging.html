@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="45">
+<meta name="dt-version" content="46">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -229,6 +229,7 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
     <select id="typeFilter" hidden><option value=""></option></select>
     <label class="chk"><input type="checkbox" id="onlyDigital" style="width:auto"> Alleen digitaal</label>
     <button class="btn primary" id="genBtn">Genereer aanbevelingen</button>
+    <button class="btn" id="trainBtn" title="Beoordeel 50 tracks met ja, twijfel of nee (en waarom), zodat de aanbevelingen leren wat je zoekt">Train de tool (50 tracks)</button>
   </div>
   <span id="status"></span>
 </header>
@@ -245,6 +246,7 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
   <div class="small muted" id="genMsg" style="margin-bottom:8px"></div>
   <div class="toolbar" id="pushBar"></div>
   <div class="toolbar" id="viewTabs"></div>
+  <div id="trainBox" hidden></div>
   <div id="searchRecs"></div>
   <div id="recList"><div class="empty">Importeer eerst een paar sets, en klik dan op "Genereer aanbevelingen".</div></div>
 </section>
@@ -485,6 +487,12 @@ function mergeData(d){
   ['hpHand', 'hpLabelsOff', 'hpTried'].forEach(k => { if (d[k] && typeof d[k] === 'object') state[k] = Object.assign({}, d[k], state[k] || {}); });
   if (d.hpButtonsEdited && !state.hpButtonsEdited) state.hpButtonsEdited = true;
   ['token', 'ytKey', 'spClient', 'playerPref'].forEach(k => { if (!state[k] && d[k]) state[k] = d[k]; });
+  // training answers: keep every one, the newest answer per track wins
+  if (d.train && d.train.judged){
+    state.train = state.train || {judged: {}}; state.train.judged = state.train.judged || {};
+    Object.entries(d.train.judged).forEach(([k, j]) => { const o = state.train.judged[k]; if (!o || (j.t || 0) > (o.t || 0)){ if (!o) added++; state.train.judged[k] = j; } });
+    if ((!state.train.batch || !state.train.batch.length) && Array.isArray(d.train.batch)){ state.train.batch = d.train.batch; state.train.i = d.train.i || 0; }
+  }
   return added;
 }
 
@@ -788,6 +796,9 @@ function buildProfile(T){
       P.labels[k] = Math.max(P.labels[k] || 0, 1); if (!P.labelIds[k]) P.labelIds[k] = {name};
     });
   }
+  // training answers: yes counts as a light like, every judged track is "already heard", no-artists count against
+  P.trainNo = new Set();
+  Object.values((state.train || {}).judged || {}).forEach(j => { if (!j.item) return; if (j.v === 1) add(j.item, 1.3); markSeen(P, j.item); if (j.v === -1) (j.item.artists || []).forEach(a => P.trainNo.add(norm(a.name))); });
   state.skips.forEach(s => markSeen(P, s));
   P.skipArtists = new Set(state.skips.flatMap(s => (s.artists || []).map(a => norm(a.name))));
   P.banArtists = new Set((state.bans || []).flatMap(b => (b.artists || []).map(a => norm(a.name))));
@@ -884,6 +895,7 @@ function scoreCand(c, P, opts){
   else if (popMode === 'classics') score *= 0.85 + 0.3 * Math.min(1, pop);
   else score *= Math.sqrt(big * hit);
   if (P.banArtists && c.artists.some(a => P.banArtists.has(norm(a.name)))) score = 0;
+  if (P.trainNo && c.artists.some(a => P.trainNo.has(norm(a.name)))){ score *= 0.4; why.push(['Artiest afgewezen in training', null]); }
   if (popMode !== 'classics' && c.artists.some(a => TOO_BIG.has(norm(a.name)))) score = 0;
   // artists you've already been shown a lot: each earlier round counts
   if (!opts.noShown){ const sa = Math.max(0, ...c.artists.map(a => (state.shownArtists || {})[norm(a.name)] || 0)); if (sa) score *= Math.pow(0.6, Math.min(sa, 5)); }
@@ -1046,7 +1058,7 @@ function deezerJobs(P, nLabels, nArtists, nRelated, perRelated = 10, perKnown = 
   return jobs;
 }
 
-async function generateRecs(){
+async function generateRecs(mode = {}){
   const T = target();
   const steer = hasTarget(T);
   const prog = makeProg('#genProg', '#genMsg');
@@ -1058,8 +1070,8 @@ async function generateRecs(){
   }
   const P = prepProfile(buildProfile(steer ? T : null));
   if (!P.n) throw new Error(HOUSE ? 'Importeer eerst je house-profiel (tab House-profiel).' : 'Nog geen gevonden tracks in je sets.');
-  const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 4, capArtist: 1, limit: 200,
-    sectionLimit: {related: 120, label: 50, known: 10}};
+  const opts = {popMode: $('#popMode').value, minYear: +$('#minYear').value || 0, style: $('#styleFilter').value, capLabel: 4, capArtist: 1, limit: mode.train ? 300 : 200,
+    sectionLimit: mode.train ? {related: 200, label: 80, known: 20} : {related: 120, label: 50, known: 10}, noShown: !!mode.train};
   const topLabels = topN(P.labels, 15).map(([k]) => k);
   const topArtists = topN(P.artists, 25).map(([k]) => k);
   const topStyles = topN(P.styles, 6).map(([s]) => s).filter(s => !GENERIC_STYLES.has(s)).slice(0, 3);
@@ -1088,15 +1100,19 @@ async function generateRecs(){
   let fitInfo = null;
   // listen to the best candidates: what doesn't sound like your sets is dropped, the rest is ranked on sound (and your target)
   const S = soundProfile();
-  const listen = recs.filter(c => c.section !== 'known').slice(0, 130).concat(recs.filter(c => c.section === 'known').slice(0, 10));
+  // training: listen to a spread over the whole list (best, middle and edge), not only the top
+  const listen = mode.train ? (() => { const J = trainJudged(), L = recs.filter(c => !J[trainKey(c)]), st = Math.max(1, L.length / 90); const o = []; for (let i = 0; i < L.length && o.length < 90; i += st) o.push(L[Math.floor(i)]); return o; })()
+    : recs.filter(c => c.section !== 'known').slice(0, 130).concat(recs.filter(c => c.section === 'known').slice(0, 10));
   await measureMany(listen, (d, n) => prog(0.65 + 0.35 * d / n, `Kandidaten beluisteren${steer ? ' op ' + describeTarget(T) : ' op je sound'} ${d}/${n}…`));
   let fits = 0, dropped = 0;
+  const TM = trainModel();
   recs.forEach(c => {
-    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []}, h = hpFit(c);
-    c.sound = m.f; c.fit = r.f; c.fitWhy = h.why ? r.why.concat(h.why) : r.why;
-    c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f * h.f;
+    const m = soundMatch(c, S), r = steer ? fitOf(c, T) : {f: 1, why: []}, h = hpFit(c), tr = TM.n ? trainFit(c, TM) : {f: 1, why: []};
+    c.sound = m.f; c.fit = r.f; c.fitWhy = (h.why ? r.why.concat(h.why) : r.why).concat(tr.why);
+    c.baseScore = c.baseScore ?? c.score; c.score = c.baseScore * m.f * r.f * h.f * tr.f;
     if (r.f >= 1.2) fits++;
   });
+  if (mode.train){ prog(1, ''); return recs.filter(c => state.energy[enKey(c)]); }
   // unmeasured tracks below the listened ones would stay unchecked: only keep them if there's room
   recs = recs.filter(c => { const bad = c.sound < 0.35 || c.score <= 0; if (bad) dropped++; return !bad; });
   recs.sort((a, b) => b.score - a.score);
@@ -4611,6 +4627,145 @@ async function djOwn(name, run){
     if (el()){ el().innerHTML = items.length ? COLHEAD + items.map((c, i) => recHTML(c, i, 'djown')).join('') : '<div class="small muted">Geen tracks gevonden.</div>'; fillAvailability(el(), items); queueEnergy(items); applyDigitalFilter(); }
   } catch(e){ if (el()) el().innerHTML = `<span class="bad small">${esc(e.message)}</span>`; }
 }
+
+/* ================= Training: 50 tracks, you say yes / doubt / no and why =================
+   The 50 are picked spread out: strong matches, doubtful ones and edge cases, so every answer teaches something.
+   Your answers count in every next round: the sound (nearest judged tracks), artists/labels, and your own words. */
+const TRAIN_N = 50;
+const TRAIN_WHY_YES = ['mooie groove', 'goede drums', 'lekkere baslijn', 'sfeer', 'precies mijn energie', 'hypnotisch', 'warm', 'donker', 'vocals', 'origineel'];
+const TRAIN_WHY_NO = ['te hard', 'te rustig', 'te commercieel', 'te druk', 'saai', 'te vrolijk', 'te donker', 'te kaal', 'verkeerde vibe', 'slechte productie'];
+const trainJudged = () => (state.train && state.train.judged) || {};
+function trainKey(c){ return candKey(c); }
+// what your words say, over all judged tracks: per type and energy, +1 for yes and -1 for no
+function trainWords(){
+  const W = {types: {}, en: [0, 0, 0, 0, 0, 0], pop: 0};
+  Object.values(trainJudged()).forEach(j => {
+    if (!j.note || !j.v) return;
+    const P = parsePrompt(j.note);
+    P.types.forEach(k => W.types[k] = (W.types[k] || 0) + j.v);
+    if (P.energy) for (let e = P.lo; e <= P.hi; e++) W.en[e] += j.v;
+    if (P.pop === 'classics' || /commercieel|bekend|mainstream|cheesy/.test(norm(j.note))) W.pop += j.v;
+  });
+  return W;
+}
+// sound + words: how close a candidate is to the tracks you said yes / no to
+let tjCache = null;
+function trainModel(){
+  const J = Object.values(trainJudged()), rows = [];
+  J.forEach(j => { const e = state.energy[j.ek]; if (e && e.ft) rows.push({v: j.v, ft: e.ft}); });
+  const sd = {};
+  FT_KEYS.forEach(k => { const v = rows.map(r => r.ft[k]).filter(x => x != null); const m = v.reduce((a, b) => a + b, 0) / (v.length || 1); sd[k] = Math.max(1e-3, Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length || 1))); });
+  return tjCache = {rows, sd, W: trainWords(), n: J.length};
+}
+function trainFit(c, M){
+  M = M || tjCache || trainModel();
+  let f = 1; const why = [];
+  const e = state.energy[enKey(c)];
+  if (e && e.ft && M.rows.length >= 6){
+    const near = M.rows.map(r => ({v: r.v, d: FT_KEYS.reduce((a, k) => a + Math.min(4, Math.abs((e.ft[k] - r.ft[k]) / M.sd[k])), 0) / FT_KEYS.length}))
+      .sort((a, b) => a.d - b.d).slice(0, 5);
+    let s = 0, w = 0; near.forEach(n => { const x = 1 / (0.3 + n.d); s += n.v * x; w += x; });
+    const vote = w ? s / w : 0;
+    f *= 1 + 0.6 * vote;
+    if (vote > 0.4) why.push('klinkt als tracks die je goed vond'); else if (vote < -0.4) why.push('klinkt als tracks die je afwees');
+  }
+  const t = typesOf(c) || [];
+  t.forEach(k => { const v = M.W.types[k] || 0; if (v >= 2) f *= 1.12; else if (v <= -2){ f *= 0.8; why.push('type dat je vaak afwees'); } });
+  const en = e && e.e;
+  if (en){ const v = M.W.en[en] || 0; if (v >= 2) f *= 1.1; else if (v <= -2){ f *= 0.75; why.push('energie die je vaak afwees'); } }
+  if (M.W.pop <= -2 && (c.rank || 0) > 300000) f *= 0.7;
+  return {f, why};
+}
+// pick 50 spread out over the ranking: the best, the middle and the edge
+function trainPick(recs){
+  const J = trainJudged(), L = recs.filter(c => !J[trainKey(c)] && c.score > 0 && (c.sound == null || c.sound >= 0.2)).sort((a, b) => b.score - a.score);
+  const n = L.length, parts = [[0, 0.33, 20], [0.33, 0.7, 15], [0.7, 1, 15]], out = [], arts = new Set();
+  parts.forEach(([a, b, k]) => {
+    const seg = L.slice(Math.floor(a * n), Math.ceil(b * n)), step = Math.max(1, seg.length / k);
+    for (let i = 0, got = 0; i < seg.length && got < k; i += step){
+      const c = seg[Math.floor(i)], ak = norm((c.artists[0] || {}).name);
+      if (arts.has(ak)) continue; arts.add(ak); c.trainBand = a === 0 ? 'sterk' : a < 0.5 ? 'twijfel' : 'rand'; out.push(c); got++;
+    }
+  });
+  // not enough different artists: fill up from what's left
+  for (const c of L){ if (out.length >= TRAIN_N) break; if (!out.includes(c)){ c.trainBand = 'twijfel'; out.push(c); } }
+  // mix them, so you don't hear the best ones first
+  for (let i = out.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out.slice(0, TRAIN_N);
+}
+async function trainStart(){
+  const box = $('#trainBox');
+  box.hidden = false;
+  box.innerHTML = '<div class="card"><h2 style="margin:0 0 6px">Training</h2><div class="small muted" id="trainMsg">50 tracks kiezen: sterke, twijfelachtige en randgevallen…</div></div>';
+  try {
+    const recs = await generateRecs({train: true});
+    const items = trainPick(recs);
+    if (!items.length) throw new Error('Geen nieuwe tracks gevonden om te beoordelen.');
+    state.train = state.train || {judged: {}};
+    state.train.batch = items.map(strip); state.train.i = 0; save();
+    trainRender();
+  } catch(err){ box.innerHTML = `<div class="card"><span class="bad">${esc(err.message)}</span></div>`; }
+}
+function trainRender(){
+  const T = state.train, box = $('#trainBox');
+  if (!T || !T.batch || !T.batch.length){ box.hidden = true; return; }
+  box.hidden = false;
+  const J = trainJudged(), B = T.batch, i = Math.min(T.i || 0, B.length);
+  const cnt = {1: 0, 0: 0, '-1': 0}; B.forEach(c => { const j = J[trainKey(c)]; if (j) cnt[j.v]++; });
+  if (i >= B.length){
+    box.innerHTML = `<div class="card"><h2 style="margin:0 0 6px">Training klaar</h2>
+      <p class="small">Je beoordeelde ${cnt[1] + cnt[0] + cnt['-1']} tracks: ${cnt[1]} ja, ${cnt[0]} twijfel, ${cnt['-1']} nee. In totaal tellen nu ${Object.keys(J).length} oordelen mee in je aanbevelingen.</p>
+      <div class="row"><button class="btn primary" id="trGen">Nieuwe aanbevelingen met wat ik geleerd heb</button><button class="btn" id="trMore">Nog 50</button><button class="btn" id="trClose">Sluiten</button></div></div>`;
+    $('#trGen').onclick = () => { trainClose(); $('#genBtn').click(); };
+    $('#trMore').onclick = trainStart; $('#trClose').onclick = trainClose;
+    return;
+  }
+  const c = B[i], j = J[trainKey(c)] || {};
+  inlineLists.train = [c];
+  const chips = (list, cls) => list.map(w => `<button class="chip ${cls}" data-trw="${esc(w)}">${esc(w)}</button>`).join('');
+  box.innerHTML = `<div class="card" id="trainCard">
+    <div class="row"><h2 class="grow" style="margin:0">Training · track ${i + 1} van ${B.length}</h2><span class="small muted">${cnt[1]} ja · ${cnt[0]} twijfel · ${cnt['-1']} nee</span><a href="#" class="small" id="trStop">stoppen (later verder)</a></div>
+    <div class="progress" style="margin:6px 0 4px"><div style="width:${Math.round(i / B.length * 100)}%"></div></div>
+    ${COLHEAD}${recHTML(c, 0, 'train')}
+    <input id="trNote" class="grow" style="width:100%;margin-top:10px" placeholder="Waarom wel of niet? Bijv. mooie groove, te hard, te commercieel, lekker hypnotisch" value="${esc(j.note || '')}">
+    <div class="small muted" style="margin-top:6px">Waarom wel: ${chips(TRAIN_WHY_YES.concat(TYPES.map(t => t[1].toLowerCase())), 'fit')}</div>
+    <div class="small muted" style="margin-top:4px">Waarom niet: ${chips(TRAIN_WHY_NO, 'why')}</div>
+    <div class="small" id="trHeard" style="margin-top:6px"></div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn primary" data-trv="1">✓ Ja, dit zoek ik</button><button class="btn" data-trv="0">~ Twijfel</button><button class="btn" data-trv="-1">✕ Nee, niet mijn ding</button>
+      <span class="grow"></span>${i > 0 ? '<button class="btn small" id="trBack">← Vorige</button>' : ''}<button class="btn small" id="trSkip">Sla over</button>
+    </div>
+  </div>`;
+  playQueue([{artist: c.artists.map(a => a.name).join(', '), title: c.title, preview: c.preview, dzTrackId: c.dzTrackId}], 0);
+  fillAvailability(box, [c]); queueEnergy([c]);
+  const heard = () => { const v = $('#trNote').value.trim(); if (!v){ $('#trHeard').textContent = ''; return; } const P = parsePrompt(v); const d = describePrompt(P).replace(/ · (verborgen parels|bekendere tracks)$/, ''); $('#trHeard').innerHTML = (d && d !== 'verborgen parels' ? 'Begrepen: <b>' + esc(d) + '</b>' : '') + (P.unknown.length ? ` <span class="muted">· ook bewaard: ${esc(P.unknown.join(', '))}</span>` : ''); };
+  $('#trNote').oninput = heard; heard();
+  box.querySelectorAll('[data-trw]').forEach(b => b.onclick = () => { const n = $('#trNote'); n.value = (n.value.trim() ? n.value.trim() + ', ' : '') + b.dataset.trw; heard(); n.focus(); });
+  box.querySelectorAll('[data-trv]').forEach(b => b.onclick = () => trainJudge(c, +b.dataset.trv, $('#trNote').value.trim()));
+  $('#trNote').onkeydown = e => { if (e.key === 'Enter' && e.metaKey) trainJudge(c, 1, e.target.value.trim()); };
+  if ($('#trBack')) $('#trBack').onclick = () => { T.i = i - 1; save(); trainRender(); };
+  $('#trSkip').onclick = () => { T.i = i + 1; save(); trainRender(); };
+  $('#trStop').onclick = ev => { ev.preventDefault(); trainClose(true); };
+}
+function trainJudge(c, v, note){
+  const T = state.train;
+  T.judged[trainKey(c)] = {v, note, t: Date.now(), ek: enKey(c), item: strip(Object.assign({}, c, {why: undefined, fitWhy: undefined}))};
+  T.i = (T.i || 0) + 1; tjCache = null; save();
+  trainRender();
+}
+function trainClose(keep){
+  stopAll();
+  if (!keep && state.train){ state.train.batch = []; state.train.i = 0; save(); }
+  $('#trainBox').hidden = true;
+  trainButton();
+}
+function trainButton(){
+  const b = $('#trainBtn'); if (!b) return;
+  const T = state.train, left = T && T.batch && T.batch.length ? T.batch.length - (T.i || 0) : 0;
+  b.textContent = left > 0 ? `Verder met trainen (${left} over)` : 'Train de tool (50 tracks)';
+}
+$('#trainBtn').onclick = () => { const T = state.train; if (T && T.batch && T.batch.length && (T.i || 0) < T.batch.length){ showTab('recs'); trainRender(); scrollTo({top: 0, behavior: 'smooth'}); } else { showTab('recs'); trainStart(); } };
+trainButton();
 
 hpInit();
 // get the in-app Spotify player ready in the background, so the first click can start sound right away
