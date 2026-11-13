@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="38">
+<meta name="dt-version" content="39">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -283,6 +283,24 @@ html[data-variant="house"] .lbl{color:#d4c3dd}
 </section>
 
 <section id="tab-settings">
+  <div class="card" id="libCard">
+    <h2>Je muziekmap (echte waveform)</h2>
+    <p class="small muted">Kies de map met je eigen muziek (mp3, wav, aiff, flac, m4a). Speel je een track die daarin staat, dan speelt de app jouw bestand met de echte waveform van de hele track, net als Rekordbox. Er wordt niets geüpload of gekopieerd: de app onthoudt alleen de namen, in deze browser.</p>
+    <div class="row"><button class="btn primary" id="libPick">Kies muziekmap</button><button class="btn" id="libRescan">Opnieuw inlezen</button><input type="file" id="libInput" webkitdirectory multiple hidden></div>
+    <div class="small" id="libStatus" style="margin-top:8px"></div>
+    <div class="small muted" id="libMsg"></div>
+  </div>
+  <div class="card" id="scCard">
+    <h2>SoundCloud</h2>
+    <p class="small muted">Met je eigen SoundCloud-app zoekt de tool elke track op SoundCloud en speelt hem daar met de echte waveform. Zonder koppeling werkt alles gewoon zoals nu. Eenmalig instellen (je hebt een SoundCloud Artist Pro-abonnement nodig, anders laat SoundCloud je geen app maken):</p>
+    <ol class="small muted" style="margin:0 0 10px;padding-left:18px">
+      <li>Ga naar <a href="https://soundcloud.com/you/apps" target="_blank" rel="noopener">soundcloud.com/you/apps</a>, log in en maak een nieuwe app ("Register a new application").</li>
+      <li>Naam bijvoorbeeld "Mijn digging tool", een korte beschrijving, website mag leeg. Vraagt hij om een Redirect URI, vul dan <code>http://127.0.0.1:8765/digging.html</code> in. Accepteer de voorwaarden en sla op.</li>
+      <li>Kopieer de "Client ID" en het "Client Secret" en plak ze hieronder. Ze blijven alleen op je Mac en gelden voor beide tools.</li>
+    </ol>
+    <div class="row"><input id="scId" class="grow" placeholder="SoundCloud Client ID"><input id="scSecret" class="grow" type="password" placeholder="Client Secret"><button class="btn primary" id="scConnect">Verbind</button><button class="btn" id="scOff" hidden>Ontkoppel</button></div>
+    <div class="small" id="scMsg" style="margin-top:8px"></div>
+  </div>
   <div class="card" id="spCard">
     <h2>Spotify</h2>
     <p class="small muted">Koppel je Spotify-account. Dan speelt de app volledige tracks via Spotify (met Premium, ingelogd in deze browser) en zet je playlists met één klik in Spotify. Eenmalig instellen:</p>
@@ -2013,7 +2031,7 @@ setInterval(() => {
     $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName + (eng && eng !== audioEng && !peaks && eng.dur() ? ' · geen waveform voor deze bron' : '');
   } else {
     drawWave();
-    $('#plInfo').textContent = fmtT(audio.currentTime) + ' / ' + fmtT(audio.duration) + ' · preview' + (engNote ? ' (' + engNote + ')' : '');
+    $('#plInfo').textContent = fmtT(audio.currentTime) + ' / ' + fmtT(audio.duration) + ' · ' + (engName === 'eigen bestand' ? engName : 'preview') + (engNote ? ' (' + engNote + ')' : '');
   }
 }, 250);
 
@@ -2143,13 +2161,21 @@ function fullLinks(it){
 async function peekLinks(it){
   if (!it.dzTrackId) return null;
   const hit = await idb.get('sl:' + it.dzTrackId);
-  return hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud) ? hit.d : null;
+  const d = hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud) ? hit.d : null;
+  if (d && !d.soundcloud && scOn() && !d.scTried){
+    // links found before SoundCloud was connected: look there once more
+    const u = await within(6000, 'te traag', (res, rej) => scFind(it).then(res, rej)).catch(() => undefined);
+    if (u !== undefined){ d.scTried = true; if (u){ d.soundcloud = u; d.diag = diagOf(d); } idb.set('sl:' + it.dzTrackId, {t: hit.t, d}); }
+  }
+  return d;
 }
 async function fullLinksRaw(it){
   let id = it.dzTrackId;
   if (!id){ try { const pv = await findPreview(it.artist, it.title); const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; } catch(e){} }
   const out = {deezer: id || null};
-  if (!id){ out.sl = 'overgeslagen (niet op Deezer)'; if (spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; } if (!out.spotify){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; } out.diag = diagOf(out); return out; }
+  const scP = scOn() ? scFind(it).catch(() => null) : Promise.resolve(null);
+  const addSc = async () => { if (scOn()){ out.scTried = true; if (!out.soundcloud){ const u = await scP; if (u) out.soundcloud = u; } } };
+  if (!id){ await addSc(); out.sl = 'overgeslagen (niet op Deezer)'; if (spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; } if (!out.spotify){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; } out.diag = diagOf(out); return out; }
   const key = 'sl:' + id, hit = await idb.get(key);
   if (hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud)){ if (hit.d.youtube && !Array.isArray(hit.d.youtube)) hit.d.youtube = [hit.d.youtube]; return hit.d; }
   if (state.slOff && Date.now() - state.slOff < 7 * 864e5) out.sl = 'uit (vraagt een sleutel)';
@@ -2166,6 +2192,7 @@ async function fullLinksRaw(it){
       if (sc) out.soundcloud = sc;
     }
   } catch(e){ out.sl = 'niet bereikbaar'; }
+  await addSc();
   if (!out.spotify && spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; }
   if (!out.youtube && !(out.spotify && spConnected() && (state.spUser || {}).premium)){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; }
   out.diag = diagOf(out);
@@ -2177,7 +2204,7 @@ function diagOf(o){
     'song.link: ' + (o.sl || 'ok'),
     'Spotify: ' + (o.spotify ? 'gevonden' : spConnected() ? 'niet gevonden' : 'niet verbonden (Instellingen)'),
     'YouTube: ' + (o.youtube ? 'gevonden' + (o.ytVia ? ' via ' + o.ytVia : '') : o.ytTried ? 'niets gevonden' + (state.ytKey ? '' : ' (geen YouTube-sleutel)') : 'niet gezocht'),
-    'SoundCloud: ' + (o.soundcloud ? 'gevonden' : 'niet gevonden'),
+    'SoundCloud: ' + (o.soundcloud ? 'gevonden' : scOn() ? 'niet gevonden' : 'niet gezocht (verbind SoundCloud bij Instellingen)'),
   ].join(' · ');
 }
 // Find a YouTube video without song.link: own YouTube API key (most reliable), else public Piped / Invidious mirrors
@@ -2407,6 +2434,8 @@ async function playSoundCloud(url, token){
     if (token !== playToken) return;
     if (snd && (snd.policy === 'SNIP' || (snd.full_duration && snd.duration && snd.duration < snd.full_duration - 2000))){ nextSource(token); return; }
     scWave(snd, token);
+    // credit the uploader and link to the track on SoundCloud
+    if (snd && snd.permalink_url) $('#plDiag').innerHTML = 'Speelt van <a href="' + esc(snd.permalink_url) + '" target="_blank" rel="noopener">SoundCloud</a> · geüpload door ' + (snd.user && snd.user.permalink_url ? '<a href="' + esc(snd.user.permalink_url) + '" target="_blank" rel="noopener">' + esc(snd.user.username || '') + '</a>' : esc((snd.user || {}).username || ''));
   }); };
   if (!scW){
     // one widget for the whole session: bind once, later tracks are loaded into it
@@ -2520,6 +2549,10 @@ async function playIndex(i){
   $('#plFull').hidden = true;
   $('#plDiag').textContent = '';
   peaks = null; prevPeaks = null; eng = null; srcList = []; drawWave();
+  // your own file first: real waveform of the whole track
+  const lx = libLookup(it);
+  if (lx && await playLocal(it, lx, token)) return;
+  if (token !== playToken) return;
   const pref = state.playerPref || 'auto';
   if (pref === 'preview'){ playPreview(it, i, ''); return; }
   // full version already known: start it straight away, the bars come from the preview in the background
@@ -4099,6 +4132,238 @@ function promptHit(t){
 $('#promptGo').onclick = runPrompt;
 $('#promptQ').addEventListener('keydown', e => { if (e.key === 'Enter') runPrompt(); });
 if (state.prompt && state.prompt.text) $('#promptQ').value = state.prompt.text;
+
+/* ================= SoundCloud via your own SoundCloud app =================
+   The local server holds your Client ID + Secret (never this page) and searches SoundCloud's official API.
+   Without a connection nothing changes: the tool works as before. */
+let scInfo = null;
+const scOn = () => !!(scInfo && scInfo.sc);
+const SC_FIX = 'for f in server.js server.py; do curl -fsSL https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/$f -o /tmp/dt-$f && for d in ~/DiggingTool ~/DiggingToolHouse; do [ -d "$d" ] && cp /tmp/dt-$f "$d/$f"; done; done; launchctl kickstart -k gui/$(id -u)/nl.diggingtool.server; launchctl kickstart -k gui/$(id -u)/nl.diggingtool.house 2>/dev/null; echo klaar';
+async function scInit(){
+  try { const r = await fetch('/__info', {cache: 'no-store'}); scInfo = r.ok ? await r.json() : {server: 1}; } catch(e){ scInfo = {server: 0}; }
+  scStatus();
+}
+function scStatus(msg, bad){
+  const m = $('#scMsg'); if (!m) return;
+  const old = scInfo && scInfo.server < 2;
+  $('#scOff').hidden = !scOn();
+  $('#scConnect').textContent = scOn() ? 'Vervang sleutel' : 'Verbind';
+  if (msg) m.innerHTML = `<span class="${bad ? 'warn' : 'ok'}">${esc(msg)}</span>`;
+  else if (old) m.innerHTML = `<span class="warn">Je tool-server is nog van vóór deze functie. Eenmalig bijwerken: open Terminal (Cmd+Spatie, typ Terminal), plak deze regel en druk Enter. Daarna werkt de server zichzelf voortaan bij.</span>
+    <div class="row" style="margin-top:6px"><code class="grow" style="word-break:break-all">${esc(SC_FIX)}</code><button class="btn" id="scFixCopy">Kopieer</button></div>`;
+  else m.innerHTML = scOn() ? '<span class="ok">SoundCloud is verbonden. Tracks worden eerst op SoundCloud gezocht.</span>' : 'Niet verbonden.';
+  const c = $('#scFixCopy'); if (c) c.onclick = () => { navigator.clipboard.writeText(SC_FIX); c.textContent = 'Gekopieerd'; };
+}
+$('#scConnect').onclick = async () => {
+  const id = $('#scId').value.trim(), secret = $('#scSecret').value.trim();
+  if (!id || !secret) return scStatus('Vul Client ID en Client Secret in.', true);
+  if (scInfo && scInfo.server < 2) return scStatus();
+  scStatus('Even testen bij SoundCloud…');
+  try {
+    const r = await fetch('/__sc/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id, secret})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return scStatus(j.error || 'Verbinden mislukt (HTTP ' + r.status + ').', true);
+    $('#scId').value = ''; $('#scSecret').value = '';
+    scInfo.sc = true; scStatus();
+  } catch(e){ scStatus('Kon de tool-server niet bereiken.', true); }
+};
+$('#scOff').onclick = async () => {
+  try { await fetch('/__sc/config', {method: 'DELETE'}); } catch(e){}
+  if (scInfo) scInfo.sc = false; scStatus();
+};
+// find the track on SoundCloud: same title, the artist in uploader/title, the right version, a full (not snippet) upload
+async function scFind(it){
+  if (!scOn() || !it || !it.title) return null;
+  const a1 = splitArtists(it.artist || '')[0] || it.artist || '', t = cleanTitle(it.title), core = titleCore(t);
+  if (!core) return null;
+  const vw = norm(it.title).split(' ').filter(w => w && !norm(t).split(' ').includes(w) && !/^(original|mix|version|feat|ft)$/.test(w));
+  const key = 'scs:' + norm(it.artist) + '|' + norm(it.title), hit = await idb.get(key);
+  if (hit && Date.now() - hit.t < (hit.d ? 30 : 7) * 864e5) return hit.d;
+  const list = await fetchJSON('/__sc/search?q=' + encodeURIComponent(a1 + ' ' + t + (vw.length ? ' ' + vw.join(' ') : '')), 9000);
+  if (!Array.isArray(list)) return null;   // server unreachable or SoundCloud error: try again next time
+  const arts = splitArtists(it.artist || '').map(norm).filter(Boolean);
+  let best = null, bestS = 0;
+  for (const x of list){
+    if (!x.url || x.access !== 'playable' || (x.full && x.dur && x.dur < x.full - 2000) || (x.dur && x.dur < 90000)) continue;
+    const xt = ' ' + norm(x.title) + ' ', who = ' ' + norm(x.user + ' ' + x.artist) + ' ' + xt;
+    if (!(' ' + titleCore(x.title) + ' ').includes(' ' + core + ' ') && !xt.includes(' ' + core + ' ')) continue;
+    if (arts.length && !arts.some(a => who.includes(' ' + a + ' '))) continue;
+    let sc = 10;
+    if (vw.length) sc += vw.filter(w => xt.includes(' ' + w + ' ')).length * 3 - (vw.every(w => !xt.includes(' ' + w + ' ')) ? 6 : 0);
+    else if (/\b(remix|edit|rework|bootleg|vip|dub mix|live)\b/i.test(x.title)) sc -= 6;
+    if (/\b(preview|snippet|clip)\b/i.test(x.title)) sc -= 8;
+    if (arts.some(a => (' ' + norm(x.user) + ' ').includes(' ' + a + ' '))) sc += 2;
+    if (sc > bestS){ bestS = sc; best = x.url; }
+  }
+  idb.set(key, {t: Date.now(), d: best});
+  return best;
+}
+scInit();
+
+/* ================= Your own music folder: real waveforms, like Rekordbox =================
+   The app reads the audio files in a folder you choose (mp3, wav, aiff, flac, m4a). When you play a track you
+   have yourself, it plays that file and draws the real waveform of the whole track. Nothing is uploaded or copied:
+   the files stay where they are, the app only keeps a list of names (in this browser). */
+const LIB_EXT = /\.(mp3|wav|aiff?|flac|m4a|aac|ogg)$/i;
+let libIdx = null, libDir = null, libBusy = false;
+const libFiles = new Map();           // path -> File (when the folder was picked without folder access, e.g. Safari)
+const libFull = (a, t) => norm(a) + '|' + norm(cleanTitle(t));
+const libCore = (a, t) => norm(a) + '|' + titleCore(cleanTitle(t));
+// tags: ID3v2 (mp3, and inside aiff/wav), Vorbis comments (flac); otherwise "Artist - Title" from the file name
+function readId3(b){
+  const u = new Uint8Array(b);
+  let o = -1;
+  for (let i = 0; i + 10 < Math.min(u.length, 65536); i++) if (u[i] === 0x49 && u[i + 1] === 0x44 && u[i + 2] === 0x33 && u[i + 3] < 5){ o = i; break; }
+  if (o < 0) return null;
+  const v = u[o + 3], size = (u[o + 6] << 21) | (u[o + 7] << 14) | (u[o + 8] << 7) | u[o + 9], end = Math.min(u.length, o + 10 + size), out = {};
+  let p = o + 10;
+  const txt = (s, e) => { const enc = u[s], d = u.subarray(s + 1, e);
+    const t = enc === 1 || enc === 2 ? new TextDecoder(enc === 2 ? 'utf-16be' : 'utf-16').decode(d) : new TextDecoder(enc === 3 ? 'utf-8' : 'latin1').decode(d);
+    return t.replace(/\0+$/, '').split('\0')[0].trim(); };
+  while (p + 10 < end){
+    const id = String.fromCharCode(u[p], u[p + 1], u[p + 2], u[p + 3]);
+    if (!/^[A-Z0-9]{4}$/.test(id)) break;
+    const sz = v === 4 ? (u[p + 4] << 21) | (u[p + 5] << 14) | (u[p + 6] << 7) | u[p + 7] : (u[p + 4] << 24) | (u[p + 5] << 16) | (u[p + 6] << 8) | u[p + 7];
+    if (sz <= 0 || p + 10 + sz > end) break;
+    if (id === 'TIT2') out.title = txt(p + 10, p + 10 + sz);
+    if (id === 'TPE1') out.artist = txt(p + 10, p + 10 + sz);
+    p += 10 + sz;
+  }
+  return out.title ? out : null;
+}
+function readFlac(b){
+  const u = new Uint8Array(b);
+  if (!(u[0] === 0x66 && u[1] === 0x4C && u[2] === 0x61 && u[3] === 0x43)) return null;
+  let p = 4;
+  while (p + 4 < u.length){
+    const last = u[p] & 0x80, type = u[p] & 0x7f, len = (u[p + 1] << 16) | (u[p + 2] << 8) | u[p + 3];
+    if (type === 4){
+      const dv = new DataView(b, p + 4), td = new TextDecoder('utf-8'), out = {};
+      let q = 4 + dv.getUint32(0, true); const n = dv.getUint32(q, true); q += 4;
+      for (let i = 0; i < n && q < len; i++){ const l = dv.getUint32(q, true); const s = td.decode(new Uint8Array(b, p + 4 + q + 4, l)); q += 4 + l;
+        const m = /^(TITLE|ARTIST)=(.*)$/i.exec(s); if (m) out[m[1].toLowerCase()] = out[m[1].toLowerCase()] || m[2]; }
+      return out.title ? out : null;
+    }
+    if (last) break;
+    p += 4 + len;
+  }
+  return null;
+}
+function fromFileName(name){
+  const base = name.replace(LIB_EXT, '').replace(/^\d{1,3}[\s._-]+/, '').replace(/_/g, ' ');
+  const m = /^(.+?)\s+[-–]\s+(.+)$/.exec(base);
+  return m ? {artist: m[1].trim(), title: m[2].trim()} : {artist: '', title: base.trim()};
+}
+async function libTags(file){
+  try {
+    const b = await file.slice(0, 262144).arrayBuffer();
+    const t = readId3(b) || readFlac(b);
+    if (t && t.title) return {artist: t.artist || fromFileName(file.name).artist, title: t.title};
+  } catch(e){}
+  return fromFileName(file.name);
+}
+async function* walkDir(dir, path = ''){
+  for await (const [name, h] of dir.entries()){
+    if (name.startsWith('.')) continue;
+    if (h.kind === 'directory') yield* walkDir(h, path + name + '/');
+    else if (LIB_EXT.test(name)) yield [path + name, h];
+  }
+}
+async function libScan(files){
+  if (libBusy) return; libBusy = true;
+  const msg = t => { const m = $('#libMsg'); if (m) m.textContent = t; };
+  try {
+    const list = [];
+    if (files) files.forEach(f => { if (LIB_EXT.test(f.name)){ const p = f.webkitRelativePath || f.name; libFiles.set(p, f); list.push([p, f]); } });
+    else for await (const e of walkDir(libDir)){ list.push(e); if (list.length % 200 === 0) msg(`Bestanden zoeken… ${list.length}`); }
+    const idx = [];
+    for (let i = 0; i < list.length; i++){
+      const [p, h] = list[i];
+      const f = h.getFile ? await h.getFile() : h;
+      const t = await libTags(f);
+      idx.push({p, a: t.artist, t: t.title, s: f.size});
+      if (i % 25 === 0) msg(`Tracks lezen ${i + 1}/${list.length}…`);
+    }
+    libIdx = idx; libMap = null;
+    await idb.set('lib:index', {t: Date.now(), d: idx, picked: !files});
+    msg(''); libStatus();
+  } catch(e){ msg('Lezen mislukt: ' + (e.message || e)); }
+  finally { libBusy = false; }
+}
+let libMap = null;
+function libLookup(it){
+  if (!libIdx || !libIdx.length) return null;
+  if (!libMap){
+    libMap = new Map();
+    libIdx.forEach(x => splitArtists(x.a || '').concat(x.a ? [] : ['']).forEach(a => { [['f', libFull(a, x.t)], ['c', libCore(a, x.t)]].forEach(([k, key]) => { const kk = k + key; if (!libMap.has(kk)) libMap.set(kk, x); }); }));
+  }
+  const arts = splitArtists(it.artist || '');
+  for (const a of arts){ const x = libMap.get('f' + libFull(a, it.title)); if (x) return x; }
+  // same track without the exact version text: only when the title you play names no specific mix
+  const versioned = /\(|\[| - /.test(it.title || '') && !/original/i.test(it.title || '');
+  if (!versioned) for (const a of arts){ const x = libMap.get('c' + libCore(a, it.title)); if (x) return x; }
+  return null;
+}
+async function libFile(x){
+  if (libFiles.has(x.p)) return libFiles.get(x.p);
+  if (!libDir) return null;
+  try {
+    if ((await libDir.queryPermission({mode: 'read'})) !== 'granted' && (await libDir.requestPermission({mode: 'read'})) !== 'granted') return null;
+    let h = libDir; const parts = x.p.split('/');
+    for (const d of parts.slice(0, -1)) h = await h.getDirectoryHandle(d);
+    return await (await h.getFileHandle(parts[parts.length - 1])).getFile();
+  } catch(e){ return null; }
+}
+// full-track waveform of your own file (cached per file)
+async function libPeaks(x, url){
+  const key = 'libpk:' + x.p + '|' + x.s, hit = await idb.get(key);
+  if (hit && hit.d) return Float32Array.from(hit.d);
+  const ab = await decodeUrl(url);
+  const ch0 = ab.getChannelData(0), ch1 = ab.numberOfChannels > 1 ? ab.getChannelData(1) : ch0;
+  const N = 1200, step = Math.floor(ch0.length / N), p = new Float32Array(N);
+  for (let i = 0; i < N; i++){ let m = 0; for (let j = i * step, e = j + step; j < e; j += 8){ const v = Math.max(Math.abs(ch0[j]), Math.abs(ch1[j])); if (v > m) m = v; } p[i] = m; }
+  const mx = Math.max(...p) || 1; for (let i = 0; i < N; i++) p[i] /= mx;
+  idb.set(key, {t: Date.now(), d: Array.from(p)});
+  decodeCache.delete(url);
+  return p;
+}
+let libUrl = null;
+async function playLocal(it, x, token){
+  const f = await libFile(x);
+  if (!f || token !== playToken) return false;
+  showEmbed(null);
+  if (libUrl) URL.revokeObjectURL(libUrl);
+  libUrl = URL.createObjectURL(f);
+  eng = audioEng; engName = 'eigen bestand'; engNote = '';
+  audio.src = libUrl;
+  $('#plDiag').textContent = 'Speelt je eigen bestand: ' + x.p;
+  audio.play().catch(err => { if (token === playToken && err && err.name === 'NotAllowedError') engNote = 'klik op ▶ om te starten'; });
+  libPeaks(x, libUrl).then(p => { if (token === playToken){ peaks = p; drawWave(); } }).catch(() => {});
+  return true;
+}
+function libStatus(){
+  const m = $('#libStatus'); if (!m) return;
+  const canPick = !!window.showDirectoryPicker;
+  m.innerHTML = libIdx && libIdx.length
+    ? `<span class="ok">${libIdx.length} tracks in je muziekmap.</span>${libDir || libFiles.size ? '' : ' <span class="warn">Kies je map opnieuw om ze af te spelen (deze browser onthoudt de map niet).</span>'}`
+    : 'Nog geen muziekmap gekozen.' + (canPick ? '' : ' <span class="muted">Deze browser onthoudt de map niet; in Chrome of Edge hoef je hem maar één keer te kiezen.</span>');
+}
+async function libInit(){
+  const hit = await idb.get('lib:index');
+  if (hit && hit.d) libIdx = hit.d;
+  try { const d = await idb.get('lib:dir'); if (d && d.d) libDir = d.d; } catch(e){}
+  libStatus();
+}
+$('#libPick').onclick = async () => {
+  if (window.showDirectoryPicker){
+    try { libDir = await window.showDirectoryPicker({id: 'digging-music', mode: 'read'}); } catch(e){ return; }
+    idb.set('lib:dir', {t: Date.now(), d: libDir});
+    libScan();
+  } else $('#libInput').click();
+};
+$('#libInput').onchange = e => { const f = [...e.target.files]; if (f.length) libScan(f); };
+$('#libRescan').onclick = () => { if (libDir) libScan(); else if (libFiles.size) libScan([...libFiles.values()]); else $('#libPick').click(); };
+libInit();
 
 hpInit();
 // get the in-app Spotify player ready in the background, so the first click can start sound right away

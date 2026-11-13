@@ -1,6 +1,7 @@
 # Digging Tool local server (Python fallback): serves the app and keeps digging-data.json as automatic backup.
 # Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
-import http.server, json, os, sys, re, shutil, datetime
+import http.server, json, os, sys, re, shutil, datetime, time, base64, urllib.request, urllib.parse, urllib.error
+SERVER_VERSION = 2
 DIR = os.path.dirname(os.path.abspath(__file__)); PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 APP = os.path.join(DIR, 'digging.html')
 DATA = os.path.join(DIR, 'digging-data.json'); BK = os.path.join(DIR, 'backups')
@@ -31,6 +32,37 @@ def pick_update():
                 if v > cur and (not best or v > best[0]): best = (v, t, p)
         if best: install_html(best[1]); print('Update geinstalleerd: versie %d uit %s' % (best[0], best[2]))
     except OSError: pass
+# SoundCloud via your own SoundCloud app (client-credentials flow); key stored only on this Mac, shared by both tools
+SC_FILE = os.path.expanduser('~/.digging-tool-soundcloud.json')
+def read_sc():
+    try: return json.load(open(SC_FILE))
+    except Exception: return None
+def write_sc(o):
+    fd = os.open(SC_FILE + '.tmp', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f: json.dump(o, f)
+    os.replace(SC_FILE + '.tmp', SC_FILE)
+def http_req(url, data=None, headers={}):
+    r = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(r, timeout=10) as x: return x.status, x.read().decode('utf-8', 'ignore')
+    except urllib.error.HTTPError as e: return e.code, ''
+def sc_token(cfg, force=False):
+    if not force and cfg.get('token') and cfg.get('exp', 0) > time.time() * 1000 + 60000: return cfg['token']
+    h = {'Authorization': 'Basic ' + base64.b64encode((cfg['id'] + ':' + cfg['secret']).encode()).decode(), 'Content-Type': 'application/x-www-form-urlencoded', 'accept': 'application/json; charset=utf-8'}
+    st, b = http_req('https://secure.soundcloud.com/oauth/token', b'grant_type=client_credentials', h)
+    if st != 200: raise ValueError('SoundCloud accepteert deze Client ID / Secret niet.' if st in (400, 401) else 'SoundCloud gaf HTTP %d' % st)
+    j = json.loads(b); cfg.update(token=j['access_token'], exp=time.time() * 1000 + j.get('expires_in', 3600) * 1000); write_sc(cfg)
+    return cfg['token']
+def sc_search(q):
+    cfg = read_sc()
+    if not cfg or not cfg.get('id'): raise LookupError('niet verbonden')
+    url = 'https://api.soundcloud.com/tracks?limit=20&access=playable&q=' + urllib.parse.quote(q)
+    st, b = http_req(url, None, {'Authorization': 'OAuth ' + sc_token(cfg), 'accept': 'application/json; charset=utf-8'})
+    if st == 401: st, b = http_req(url, None, {'Authorization': 'OAuth ' + sc_token(cfg, True), 'accept': 'application/json; charset=utf-8'})
+    if st != 200: raise ValueError('SoundCloud gaf HTTP %d' % st)
+    l = json.loads(b); l = l.get('collection', []) if isinstance(l, dict) else l
+    return [{'id': t.get('id'), 'title': t.get('title'), 'user': (t.get('user') or {}).get('username', ''), 'artist': (t.get('publisher_metadata') or {}).get('artist', ''),
+             'url': t.get('permalink_url'), 'dur': t.get('duration'), 'full': t.get('full_duration') or t.get('duration'), 'access': t.get('access'), 'waveform': t.get('waveform_url')} for t in l]
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=DIR, **k)
     def end_headers(self):
@@ -43,6 +75,15 @@ class H(http.server.SimpleHTTPRequestHandler):
             try: self.reply(200, open(DATA, 'rb').read())
             except OSError: self.reply(404, b'{}')
             return
+        if path == '/__info':
+            c = read_sc() or {}; return self.reply(200, json.dumps({'server': SERVER_VERSION, 'sc': bool(c.get('id'))}).encode())
+        if path == '/__sc/config':
+            c = read_sc() or {}; return self.reply(200, json.dumps({'connected': bool(c.get('id')), 'id': c['id'][:4] + '…' if c.get('id') else ''}).encode())
+        if path == '/__sc/search':
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('q', [''])[0]
+            try: return self.reply(200, json.dumps(sc_search(q)).encode())
+            except LookupError as e: return self.reply(412, json.dumps({'error': str(e)}).encode())
+            except Exception as e: return self.reply(502, json.dumps({'error': str(e)}).encode())
         if path == '/': self.path = '/digging.html'; path = '/digging.html'
         if path == '/digging.html': pick_update()
         super().do_GET()
@@ -54,6 +95,13 @@ class H(http.server.SimpleHTTPRequestHandler):
             if not v: return self.reply(400, 'Geen Digging Tool-bestand.'.encode(), 'text/plain; charset=utf-8')
             if v <= installed(): return self.reply(409, 'Deze versie is niet nieuwer.'.encode(), 'text/plain; charset=utf-8')
             install_html(t); return self.reply(200, ('{"ok":true,"version":%d}' % v).encode())
+        if path == '/__sc/config':
+            if 'application/json' not in (self.headers.get('Content-Type') or ''): return self.reply(415, b'{}')
+            try: o = json.loads(body); cfg = {'id': str(o.get('id', '')).strip(), 'secret': str(o.get('secret', '')).strip()}
+            except Exception: return self.reply(400, b'{"error":"bad json"}')
+            if not cfg['id'] or not cfg['secret']: return self.reply(400, json.dumps({'error': 'Vul Client ID en Client Secret in.'}).encode())
+            try: sc_token(cfg, True); return self.reply(200, b'{"ok":true}')
+            except Exception as e: return self.reply(400, json.dumps({'error': str(e)}).encode())
         if path != '/__backup': self.send_error(404); return
         try: json.loads(body)
         except Exception: self.send_error(400); return
@@ -61,6 +109,12 @@ class H(http.server.SimpleHTTPRequestHandler):
         os.makedirs(BK, exist_ok=True)
         open(os.path.join(BK, 'digging-data-%s.json' % datetime.date.today()), 'wb').write(body)
         self.reply(200, b'{"ok":true}')
+    def do_DELETE(self):
+        if self.path.split('?')[0] == '/__sc/config':
+            try: os.remove(SC_FILE)
+            except OSError: pass
+            return self.reply(200, b'{"ok":true}')
+        self.send_error(404)
     def log_message(self, *a): pass
 pick_update()
 print('Digging Tool (versie %d) draait op http://127.0.0.1:%d/digging.html' % (installed(), PORT))

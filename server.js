@@ -1,7 +1,10 @@
 // Digging Tool local server: serves the app and keeps an automatic backup of your data
 // in digging-data.json (plus one copy per day in backups/).
 // Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
-const http = require('http'), fs = require('fs'), path = require('path'), os = require('os');
+// SoundCloud: with your own SoundCloud app (Client ID + Secret, stored only on this Mac) the tool finds tracks on SoundCloud.
+// The server also keeps itself up to date from GitHub, like the app does.
+const SERVER_VERSION = 2;
+const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), os = require('os'), vm = require('vm');
 const DIR = __dirname, PORT = +process.argv[2] || 8765;
 const APP = path.join(DIR, 'digging.html');
 const DATA = path.join(DIR, 'digging-data.json'), BK = path.join(DIR, 'backups');
@@ -30,8 +33,86 @@ function pickUpdate(){
     if (best){ installHtml(best.t); console.log('Update geinstalleerd: versie ' + best.v + ' uit ' + best.p); }
   } catch(e){ /* no access to Downloads: the in-app "Installeer update" button still works */ }
 }
+// ---------- SoundCloud (official API, client-credentials flow) ----------
+const SC_FILE = path.join(os.homedir(), '.digging-tool-soundcloud.json');   // shared by the techno and house tool
+const readSc = () => { try { return JSON.parse(fs.readFileSync(SC_FILE, 'utf8')); } catch(e){ return null; } };
+const writeSc = o => { fs.writeFileSync(SC_FILE + '.tmp', JSON.stringify(o), {mode: 0o600}); fs.renameSync(SC_FILE + '.tmp', SC_FILE); };
+function req(url, {method = 'GET', headers = {}, body = null} = {}){
+  return new Promise((res, rej) => {
+    const r = https.request(url, {method, headers, timeout: 10000}, x => {
+      if (x.statusCode >= 300 && x.statusCode < 400 && x.headers.location) return req(new URL(x.headers.location, url).href, {headers}).then(res, rej);
+      let d = ''; x.setEncoding('utf8'); x.on('data', c => d += c); x.on('end', () => res({status: x.statusCode, body: d}));
+    });
+    r.on('timeout', () => r.destroy(new Error('timeout'))); r.on('error', rej);
+    if (body) r.write(body); r.end();
+  });
+}
+async function scToken(cfg, force){
+  if (!force && cfg.token && cfg.exp > Date.now() + 60000) return cfg.token;
+  const basic = Buffer.from(cfg.id + ':' + cfg.secret).toString('base64');
+  const h = {'Authorization': 'Basic ' + basic, 'Content-Type': 'application/x-www-form-urlencoded', 'accept': 'application/json; charset=utf-8'};
+  let r = null;
+  if (cfg.refresh && !force) r = await req('https://secure.soundcloud.com/oauth/token', {method: 'POST', headers: h, body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(cfg.refresh)});
+  if (!r || r.status !== 200) r = await req('https://secure.soundcloud.com/oauth/token', {method: 'POST', headers: h, body: 'grant_type=client_credentials'});
+  if (r.status !== 200){ const e = new Error(r.status === 401 || r.status === 400 ? 'SoundCloud accepteert deze Client ID / Secret niet.' : r.status === 429 ? 'SoundCloud: te veel aanmeldingen, probeer het over een uur opnieuw.' : 'SoundCloud gaf HTTP ' + r.status); e.status = r.status; throw e; }
+  const j = JSON.parse(r.body);
+  Object.assign(cfg, {token: j.access_token, refresh: j.refresh_token || cfg.refresh, exp: Date.now() + (j.expires_in || 3600) * 1000});
+  writeSc(cfg);
+  return cfg.token;
+}
+async function scSearch(q){
+  const cfg = readSc(); if (!cfg || !cfg.id) { const e = new Error('niet verbonden'); e.status = 412; throw e; }
+  const url = 'https://api.soundcloud.com/tracks?limit=20&access=playable&q=' + encodeURIComponent(q);
+  const get = async force => req(url, {headers: {'Authorization': 'OAuth ' + await scToken(cfg, force), 'accept': 'application/json; charset=utf-8'}});
+  let r = await get(false);
+  if (r.status === 401) r = await get(true);
+  if (r.status !== 200){ const e = new Error('SoundCloud gaf HTTP ' + r.status); e.status = 502; throw e; }
+  let list = JSON.parse(r.body); if (list && list.collection) list = list.collection;
+  return (list || []).map(t => ({id: t.id, title: t.title, user: (t.user || {}).username || '', artist: (t.publisher_metadata || {}).artist || '',
+    url: t.permalink_url, dur: t.duration, full: t.full_duration || t.duration, access: t.access, waveform: t.waveform_url}));
+}
+const json = (s, code, o) => { s.writeHead(code, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); s.end(JSON.stringify(o)); };
+function readBody(q, max, cb){ let b = ''; q.on('data', c => { b += c; if (b.length > max) q.destroy(); }); q.on('end', () => cb(b)); }
+
+// ---------- self-update of this server file from GitHub ----------
+const RAW = 'https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/server.js';
+async function serverUpdate(){
+  try {
+    const r = await req(RAW); if (r.status !== 200) return;
+    const m = /const SERVER_VERSION = (\d+);/.exec(r.body);
+    if (!m || +m[1] <= SERVER_VERSION || !/Digging Tool local server/.test(r.body)) return;
+    new vm.Script(r.body);   // must at least compile
+    const me = __filename;
+    try { fs.mkdirSync(BK, {recursive: true}); fs.copyFileSync(me, path.join(BK, 'server-v' + SERVER_VERSION + '.js')); } catch(e){}
+    fs.writeFileSync(me + '.tmp', r.body); fs.renameSync(me + '.tmp', me);
+    console.log('Server bijgewerkt naar versie ' + m[1]);
+    if (process.env.XPC_SERVICE_NAME || process.ppid === 1) setTimeout(() => process.exit(0), 500);   // launchd starts the new one
+  } catch(e){}
+}
+setTimeout(serverUpdate, 20000); setInterval(serverUpdate, 3 * 3600e3);
+
 http.createServer((q, s) => {
   const u = decodeURIComponent(q.url.split('?')[0]);
+  if (u === '/__info') return json(s, 200, {server: SERVER_VERSION, sc: !!(readSc() || {}).id});
+  if (u === '/__sc/search'){
+    const qs = new URL(q.url, 'http://x').searchParams.get('q') || '';
+    scSearch(qs).then(r => json(s, 200, r), e => json(s, e.status || 500, {error: e.message}));
+    return;
+  }
+  if (u === '/__sc/config'){
+    // JSON only: a browser won't send that from another site without asking us first, and we don't allow it
+    if (q.method === 'GET'){ const c = readSc(); return json(s, 200, {connected: !!(c && c.id), id: c && c.id ? c.id.slice(0, 4) + '…' : ''}); }
+    if (q.method === 'DELETE'){ try { fs.unlinkSync(SC_FILE); } catch(e){} return json(s, 200, {ok: true}); }
+    if (q.method === 'POST'){
+      if (!/application\/json/.test(q.headers['content-type'] || '')) return json(s, 415, {error: 'json'});
+      return readBody(q, 4096, async b => {
+        let o; try { o = JSON.parse(b); } catch(e){ return json(s, 400, {error: 'bad json'}); }
+        const cfg = {id: String(o.id || '').trim(), secret: String(o.secret || '').trim()};
+        if (!cfg.id || !cfg.secret) return json(s, 400, {error: 'Vul Client ID en Client Secret in.'});
+        try { await scToken(cfg, true); json(s, 200, {ok: true}); } catch(e){ json(s, 400, {error: e.message}); }
+      });
+    }
+  }
   if (u === '/__backup'){
     if (q.method === 'GET'){
       fs.readFile(DATA, (e, d) => { s.writeHead(e ? 404 : 200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); s.end(e ? '{}' : d); });
