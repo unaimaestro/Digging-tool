@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="43">
+<meta name="dt-version" content="44">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -4164,11 +4164,11 @@ async function scInit(){
 }
 function scStatus(msg, bad){
   const m = $('#scMsg'); if (!m) return;
-  const old = scInfo && scInfo.server < 2;
+  const old = scInfo && scInfo.server < 5;
   $('#scOff').hidden = !scOn();
   $('#scConnect').textContent = scOn() ? 'Vervang sleutel' : 'Verbind';
   if (msg) m.innerHTML = `<span class="${bad ? 'warn' : 'ok'}">${esc(msg)}</span>`;
-  else if (old) m.innerHTML = `<span class="warn">Je tool-server is nog van vóór deze functie. Eenmalig bijwerken: open Terminal (Cmd+Spatie, typ Terminal), plak deze regel en druk Enter. Daarna werkt de server zichzelf voortaan bij.</span>
+  else if (old) m.innerHTML = (scOn() ? '<span class="ok">SoundCloud is verbonden.</span> ' : '') + `<span class="warn">Je tool-server is nog oud (nodig voor SoundCloud en set79). Eenmalig bijwerken: open Terminal (Cmd+Spatie, typ Terminal), plak deze regel en druk Enter. Daarna werkt de server zichzelf voortaan bij.</span>
     <div class="row" style="margin-top:6px"><code class="grow" style="word-break:break-all">${esc(SC_FIX)}</code><button class="btn" id="scFixCopy">Kopieer</button></div>`;
   else m.innerHTML = scOn() ? '<span class="ok">SoundCloud is verbonden. Tracks worden eerst op SoundCloud gezocht.</span>' : 'Niet verbonden.';
   const c = $('#scFixCopy'); if (c) c.onclick = () => { navigator.clipboard.writeText(SC_FIX); c.textContent = 'Gekopieerd'; };
@@ -4176,7 +4176,7 @@ function scStatus(msg, bad){
 $('#scConnect').onclick = async () => {
   const id = $('#scId').value.trim(), secret = $('#scSecret').value.trim();
   if (!id || !secret) return scStatus('Vul Client ID en Client Secret in.', true);
-  if (scInfo && scInfo.server < 2) return scStatus();
+  if (scInfo && scInfo.server < 2) return scStatus();   // v2-v4 can connect; only v1 has no SoundCloud at all
   scStatus('Even testen bij SoundCloud…');
   try {
     const r = await fetch('/__sc/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id, secret})});
