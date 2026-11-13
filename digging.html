@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="42">
+<meta name="dt-version" content="43">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -3071,7 +3071,9 @@ async function runSearch(q){
   if (n !== searchN) return;
   const seen = new Set();
   searchHits = sp.concat(dzr).filter(h => { const k = norm(h.artist) + '|' + titleCore(cleanTitle(h.title)); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 12);
-  searchDjs = dza.length ? dza.map(a => a.name) : [q];
+  const qName = q.replace(/\s+/g, ' ').trim();
+  searchDjs = [...new Map([qName].concat(dza.map(a => a.name)).map(n => [norm(n), n])).values()].slice(0, 3);
+  const s79m = /set79\.com\/dj\/([^?#\s]+)/.exec(q); if (s79m) searchDjs = [decodeURIComponent(s79m[1]).replace(/\+/g, ' ')];
   const djRows = searchDjs.map((n, i) => `<div class="sr"><span></span><div class="ph"></div><div class="n"><b>Wat draait ${esc(n)}?</b><span>Tracks uit tracklists van hun sets, met ID's, en hun eigen tracks</span></div><span class="small muted">Artiest</span><button class="btn small primary" data-srdj="${i}">Bekijk</button></div>`).join('');
   box.innerHTML = djRows + (searchHits.length ? searchHits.map((h, i) => `<div class="sr">
       <button class="play" data-srp="${i}" aria-label="Speel ${esc(h.title)}">▶</button>
@@ -4154,8 +4156,10 @@ if (state.prompt && state.prompt.text) $('#promptQ').value = state.prompt.text;
 let scInfo = null;
 const scOn = () => !!(scInfo && scInfo.sc);
 const SC_FIX = 'for f in server.js server.py; do curl -fsSL https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/$f -o /tmp/dt-$f && for d in ~/DiggingTool ~/DiggingToolHouse; do [ -d "$d" ] && cp /tmp/dt-$f "$d/$f"; done; done; launchctl kickstart -k gui/$(id -u)/nl.diggingtool.server; launchctl kickstart -k gui/$(id -u)/nl.diggingtool.house 2>/dev/null; echo klaar';
+const SERVER_WANT = 5;
 async function scInit(){
   try { const r = await fetch('/__info', {cache: 'no-store'}); scInfo = r.ok ? await r.json() : {server: 1}; } catch(e){ scInfo = {server: 0}; }
+  if (scInfo.server >= 5 && scInfo.server < SERVER_WANT) fetch('/__server-update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
   scStatus();
 }
 function scStatus(msg, bad){
@@ -4422,8 +4426,11 @@ async function s79Page(path){
   return html ? new DOMParser().parseFromString(html, 'text/html') : null;
 }
 async function djFromSet79(name, note){
-  const doc = await s79Page('/dj/' + name);
-  if (!doc){ note('set79 niet bereikbaar' + (scInfo && scInfo.server < 4 ? ' (server nog niet bijgewerkt)' : '')); return []; }
+  // set79 is picky about capitals: try the name as typed, then Title Case
+  const tc = name.replace(/(^|[\s-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  let doc = null;
+  for (const n of [...new Set([name, tc])]){ const d = await s79Page('/dj/' + n); if (d){ doc = d; if (d.querySelector('a[href*="/tracklist/"]')) break; } }
+  if (!doc){ note('set79 niet bereikbaar' + (scInfo && scInfo.server < 4 ? ' (je tool-server is nog oud, zie hieronder)' : '')); return []; }
   const seen = new Set(), links = [];
   doc.querySelectorAll('a[href*="/tracklist/"]').forEach(a => {
     const h = decodeURIComponent((a.getAttribute('href') || '').replace(/^https?:\/\/(www\.)?set79\.com/, '')).split(/[?#]/)[0];
@@ -4436,7 +4443,13 @@ async function djFromSet79(name, note){
     const tracks = [];
     d.querySelectorAll('tr').forEach(tr => {
       const a = tr.querySelector('a[href*="/track/"]');
-      if (!a){ if (/\bunknown\b/i.test(tr.textContent || '')) tracks.push({artist: 'ID', title: 'ID'}); return; }
+      if (!a){
+        const tx = [...tr.children].map(c => c.textContent).join(' | ').replace(/\s+/g, ' ');
+        const um = /unknown track of (.*?) - ([^—|]*)/i.exec(tx);
+        if (um && um[2].trim()) tracks.push({artist: um[2].trim(), title: 'ID'});
+        else if (/\bunknown\b/i.test(tx)) tracks.push({artist: 'ID', title: 'ID'});
+        return;
+      }
       const t = decodeURIComponent((a.getAttribute('href') || '').split('/track/')[1] || '').split(/[?#]/)[0] || (a.textContent || '').trim();
       const i = t.lastIndexOf(' - ');   // set79 writes "Title - Artist"
       if (i > 0) tracks.push({title: t.slice(0, i).trim(), artist: t.slice(i + 3).trim()});
@@ -4529,6 +4542,8 @@ async function openDj(name){
   djList = list; djSets = sets;
   $('#djMsg').textContent = sets.length ? `${list.length} tracks uit ${sets.length} sets met tracklist${blind ? `, plus ${blind} volledig onbekende ID's` : ''}. ${notes.join(' · ')}`
     : `Geen tracklists gevonden. ${notes.join(' · ')}`;
+  if (scInfo && scInfo.server < 4) $('#djMsg').insertAdjacentHTML('beforeend', `<div class="warn" style="margin-top:6px">Je tool-server moet eenmalig bijgewerkt worden voor set79. Open Terminal, plak deze regel en druk Enter, en herlaad dan deze pagina:</div><div class="row" style="margin-top:4px"><code class="grow" style="word-break:break-all">${esc(SC_FIX)}</code><button class="btn small" id="djFix">Kopieer</button></div>`);
+  const fx = $('#djFix'); if (fx) fx.onclick = () => { navigator.clipboard.writeText(SC_FIX); fx.textContent = 'Gekopieerd'; };
   $('#djList').innerHTML = list.slice(0, 150).map((x, i) => `<div class="sr djr">
       ${x.artist === 'ID' || isIdPart(cleanTitle(x.title)) ? '<span></span>' : `<button class="play" data-djp="${i}" aria-label="Speel ${esc(x.title)}">▶</button>`}
       <div class="ph"></div>

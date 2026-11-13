@@ -1,7 +1,7 @@
 # Digging Tool local server (Python fallback): serves the app and keeps digging-data.json as automatic backup.
 # Updates: a newer digging.html in ~/Downloads (or a "digging-tool" folder there) is taken over automatically.
 import http.server, json, os, sys, re, shutil, datetime, time, base64, urllib.request, urllib.parse, urllib.error
-SERVER_VERSION = 4
+SERVER_VERSION = 5
 DIR = os.path.dirname(os.path.abspath(__file__)); PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 APP = os.path.join(DIR, 'digging.html')
 DATA = os.path.join(DIR, 'digging-data.json'); BK = os.path.join(DIR, 'backups')
