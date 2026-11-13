@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="37">
+<meta name="dt-version" content="38">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2010,7 +2010,7 @@ setInterval(() => {
   $('#plBtn').textContent = eng.paused() ? '▶' : '❚❚';
   if (eng.kind !== 'preview'){
     drawWave();
-    $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName + (waveIsImpression() ? ' · golf uit de preview, niet exact' : '');
+    $('#plInfo').textContent = (eng.dur() ? fmtT(eng.pos()) + ' / ' + fmtT(eng.dur()) + ' · ' : '') + engName + (eng && eng !== audioEng && !peaks && eng.dur() ? ' · geen waveform voor deze bron' : '');
   } else {
     drawWave();
     $('#plInfo').textContent = fmtT(audio.currentTime) + ' / ' + fmtT(audio.duration) + ' · preview' + (engNote ? ' (' + engNote + ')' : '');
@@ -2033,7 +2033,7 @@ function drawWave(){
   if (cv.width !== w * dpr){ cv.width = w * dpr; cv.height = h * dpr; }
   const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
   const prog = eng && eng.dur() ? eng.pos() / eng.dur() : 0;
-  const src = peaks || prevPeaks;
+  const src = peaks || (eng && eng !== audioEng ? null : prevPeaks);
   if (src){
     const L = waveLayers(src, w, h, dpr), x = Math.round(cv.width * prog);
     g.drawImage(L.off, 0, 0);
@@ -2043,6 +2043,10 @@ function drawWave(){
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = VARIANT.wave.off; g.fillRect(0, h / 2 - 2, w, 4);
     g.fillStyle = VARIANT.wave.to; g.fillRect(0, h / 2 - 2, w * prog, 4);
+    // no real waveform for this source: a timeline with a tick every 30 s (long one per minute) so you can still jump around
+    const d = eng && eng.dur();
+    if (d > 60){ g.fillStyle = VARIANT.wave.off; for (let t = 30; t < d; t += 30){ const x = Math.round(t / d * w), long = t % 60 === 0; g.fillRect(x, h / 2 - (long ? 10 : 5), 1, long ? 20 : 10); } }
+    if (eng && d) { g.fillStyle = VARIANT.wave.head; g.fillRect(Math.round(w * prog), 4, 2, h - 8); }
   }
 }
 // true when the bars come from the 30s fragment while a full track is playing: then they are an impression, not exact
@@ -2050,6 +2054,8 @@ const waveIsImpression = () => !peaks && !!prevPeaks && eng && eng !== audioEng;
 
 /* --- Spotify account (PKCE login, no client secret needed) --- */
 const SP_REDIRECT = location.origin + location.pathname;
+// scopes for the in-app Spotify player (Web Playback SDK, Premium): a real player in the page instead of the embed
+const SP_PLAY_SCOPES = 'streaming user-read-email user-modify-playback-state user-read-playback-state';
 const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function spLogin(){
   const id = ($('#spClient').value || '').trim();
@@ -2060,14 +2066,14 @@ async function spLogin(){
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   sessionStorage.setItem('sp_verifier', verifier);
   const q = new URLSearchParams({response_type: 'code', client_id: id, redirect_uri: SP_REDIRECT, code_challenge_method: 'S256', code_challenge: challenge,
-    scope: 'playlist-modify-private playlist-modify-public user-read-private'});
+    scope: 'playlist-modify-private playlist-modify-public user-read-private ' + SP_PLAY_SCOPES});
   location.href = 'https://accounts.spotify.com/authorize?' + q;
 }
 async function spTokenRequest(params){
   const r = await fetch('https://accounts.spotify.com/api/token', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams(params)});
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error('Spotify: ' + (j.error_description || j.error || r.status));
-  state.sp = {access: j.access_token, refresh: j.refresh_token || (state.sp || {}).refresh, exp: Date.now() + (j.expires_in - 60) * 1000};
+  state.sp = {access: j.access_token, refresh: j.refresh_token || (state.sp || {}).refresh, exp: Date.now() + (j.expires_in - 60) * 1000, scope: j.scope || (state.sp || {}).scope || ''};
   save();
 }
 async function spHandleRedirect(){
@@ -2093,11 +2099,14 @@ async function spWeb(path, opts = {}){
   return j;
 }
 const spConnected = () => !!(state.sp && state.sp.refresh);
+const spCanSdk = () => spConnected() && (state.spUser || {}).premium && /\bstreaming\b/.test((state.sp || {}).scope || '');
+const spNeedsReconnect = () => spConnected() && (state.spUser || {}).premium && !spCanSdk();
 function spStatus(){
   $('#spRedir').textContent = SP_REDIRECT;
   $('#spClient').value = state.spClient || '';
-  if (spConnected()) $('#spMsg').innerHTML = `<span class="ok">Verbonden als ${esc((state.spUser || {}).name || '')}${state.spUser && !state.spUser.premium ? ' (geen Premium: Spotify speelt dan alleen fragmenten, de app gebruikt dan YouTube)' : ''}.</span> <a href="#" id="spOff">Ontkoppel</a>`;
+  if (spConnected()) $('#spMsg').innerHTML = spReconnectNote() + ` <span class="ok">Verbonden als ${esc((state.spUser || {}).name || '')}${state.spUser && !state.spUser.premium ? ' (geen Premium: Spotify speelt dan alleen fragmenten, de app gebruikt dan YouTube)' : ''}.</span> <a href="#" id="spOff">Ontkoppel</a>`;
 }
+function spReconnectNote(){ return spNeedsReconnect() ? ' <span class="warn">Klik één keer op <b>Verbind Spotify</b> om de nieuwe speler aan te zetten: dan speelt Spotify in de app zelf, zonder de Spotify-widget die vaak niet start.</span>' : ''; }
 document.addEventListener('click', e => { const g = e.target.closest('#goSp'); if (g){ e.preventDefault(); showTab('settings'); $('#spCard').scrollIntoView({behavior: 'smooth'}); $('#spClient').focus(); } });
 document.addEventListener('click', e => { if (e.target.id === 'spOff'){ e.preventDefault(); state.sp = null; state.spUser = null; save(); $('#spMsg').textContent = 'Ontkoppeld.'; } });
 $('#spConnect').onclick = spLogin;
@@ -2143,9 +2152,11 @@ async function fullLinksRaw(it){
   if (!id){ out.sl = 'overgeslagen (niet op Deezer)'; if (spConnected()){ const u = await spSearch(it.artist, it.title); if (u) out.spotify = u; } if (!out.spotify){ const y = await ytSearch(it.artist, it.title); if (y){ out.youtube = y.ids || [y.id]; out.ytVia = y.via; } else out.ytTried = true; } out.diag = diagOf(out); return out; }
   const key = 'sl:' + id, hit = await idb.get(key);
   if (hit && Date.now() - hit.t < 30 * 864e5 && (hit.d.youtube || hit.d.spotify || hit.d.soundcloud)){ if (hit.d.youtube && !Array.isArray(hit.d.youtube)) hit.d.youtube = [hit.d.youtube]; return hit.d; }
-  try {
+  if (state.slOff && Date.now() - state.slOff < 7 * 864e5) out.sl = 'uit (vraagt een sleutel)';
+  else try {
     const r = await fetch('https://api.song.link/v1-alpha.1/links?userCountry=NL&url=' + encodeURIComponent('https://www.deezer.com/track/' + id));
     out.sl = r.ok ? 'ok' : r.status === 429 ? 'limiet' : 'HTTP ' + r.status;
+    if (r.status === 401 || r.status === 403){ state.slOff = Date.now(); save(); }
     if (r.ok){
       const L = (await r.json()).linksByPlatform || {};
       const sp = (L.spotify || {}).url, yt = (L.youtube || L.youtubeMusic || {}).url, sc = (L.soundcloud || {}).url;
@@ -2221,6 +2232,7 @@ function stopAll(){
   try { audio.pause(); } catch(e){}
   try { ytP && ytP.pauseVideo && ytP.pauseVideo(); } catch(e){}
   try { spCtl && spCtl.pause(); } catch(e){}
+  try { spSdk && eng && eng.kind === 'spotify' && spSdk.pause(); } catch(e){}
   if (!$('#dzFrame').hidden) $('#dzFrame').src = 'about:blank';
   try { scW && scW.pause(); } catch(e){}
 }
@@ -2271,7 +2283,49 @@ async function playYouTube(ids, token){
 }
 // Spotify (full tracks when you're logged in to Spotify Premium in this browser, otherwise a preview)
 let spCtl = null, spApi = null, spSt = {position: 0, duration: 0, isPaused: true}, spLast = 0, spToken = 0;
+// in-app Spotify player (Web Playback SDK): needs Premium and the playback permissions (reconnect once)
+let spSdk = null, spSdkP = null, spDev = null, spSdkSt = {pos: 0, at: 0, dur: 0, paused: true}, spSdkLast = 0, spSdkToken = 0;
+function spSdkInit(){
+  if (spSdkP) return spSdkP;
+  spSdkP = within(12000, 'Spotify-speler in de app start niet', (res, rej) => {
+    loadScript('https://sdk.scdn.co/spotify-player.js', 'onSpotifyWebPlaybackSDKReady').then(() => {
+      spSdk = new Spotify.Player({name: VARIANT.name, volume: 0.9, getOAuthToken: cb => {
+        (Date.now() > state.sp.exp && state.sp.refresh ? spTokenRequest({grant_type: 'refresh_token', refresh_token: state.sp.refresh, client_id: state.spClient}) : Promise.resolve()).then(() => cb(state.sp.access)).catch(() => cb(state.sp.access));
+      }});
+      spSdk.addListener('ready', ({device_id}) => { spDev = device_id; res(spSdk); });
+      spSdk.addListener('not_ready', () => { spDev = null; });
+      ['initialization_error', 'authentication_error', 'account_error'].forEach(ev => spSdk.addListener(ev, ({message}) => { spSdkP = null; rej(new Error('Spotify: ' + message)); }));
+      spSdk.addListener('player_state_changed', st => {
+        if (!st) return;
+        spSdkSt = {pos: st.position / 1000, at: Date.now(), dur: st.duration / 1000, paused: st.paused};
+        // end of the track: Spotify stops at 0 after the last position; go to the next one in your list
+        if (st.paused && st.position === 0 && spSdkLast > 0 && spSdkLast >= spSdkSt.dur - 3 && spSdkToken === playToken){ spSdkLast = 0; playIndex(qi + 1); return; }
+        spSdkLast = spSdkSt.pos;
+      });
+      spSdk.connect().then(ok => { if (!ok){ spSdkP = null; rej(new Error('Spotify-speler kon niet verbinden')); } });
+    }, rej);
+  }).catch(e => { spSdkP = null; throw e; });
+  return spSdkP;
+}
+// browsers only allow sound after a click: wake the player up inside that click
+function spSdkActivate(){ try { if (spSdk && spSdk.activateElement) spSdk.activateElement(); } catch(e){} }
+async function playSpotifySdk(uri, token){
+  await spSdkInit();
+  spSdkActivate();
+  spSdkToken = token; spSdkLast = 0; spSdkSt = {pos: 0, at: Date.now(), dur: 0, paused: true};
+  await spWeb('/me/player/play?device_id=' + encodeURIComponent(spDev), {method: 'PUT', body: JSON.stringify({uris: [uri]})});
+  showEmbed(null);
+  engName = 'Spotify';
+  spWave(uri, token);
+  eng = {kind: 'spotify', toggle(){ spSdk.togglePlay(); }, seek(t){ spSdk.seek(Math.round(t * 1000)); spSdkSt.pos = t; spSdkSt.at = Date.now(); },
+    pos: () => spSdkSt.paused ? spSdkSt.pos : Math.min(spSdkSt.dur || 1e9, spSdkSt.pos + (Date.now() - spSdkSt.at) / 1000), dur: () => spSdkSt.dur,
+    paused: () => spSdkSt.paused, stop(){ try { spSdk.pause(); } catch(e){} }};
+}
 async function playSpotify(uri, token){
+  if (spCanSdk()){
+    try { await playSpotifySdk(uri, token); return; }
+    catch(e){ console.warn('spotify sdk', e); lastLinks.diag = (lastLinks.diag || '') + ' · Spotify in de app: ' + (e.message || 'fout'); if (token !== playToken) return; }
+  }
   spApi = spApi || loadScript('https://open.spotify.com/embed/iframe-api/v1', 'onSpotifyIframeApiReady');
   const api = await spApi;
   spToken = token;
@@ -2406,6 +2460,14 @@ async function startNextSource(token){
       return;
     } catch(e){ console.warn(src, e); srcIdx++; if (token !== playToken) return; }
   }
+  // nothing started: try YouTube once more if we hadn't looked there yet
+  if (token === playToken && it && !lastLinks.youtube && !lastLinks.ytLate){
+    lastLinks.ytLate = true;
+    const y = await ytSearch(it.artist, it.title).catch(() => null);
+    if (token !== playToken) return;
+    if (y){ lastLinks.youtube = y.ids || [y.id]; lastLinks.ytVia = y.via; srcList.push(['youtube', lastLinks.youtube]); return startNextSource(token); }
+    lastLinks.ytTried = true; lastLinks.diag = (lastLinks.diag || '').replace('YouTube: niet gezocht', 'YouTube: ' + 'niets gevonden' + (state.ytKey ? '' : ' (geen YouTube-sleutel)'));
+  }
   if (token === playToken) playPreview(it, qi, 'volledige versie kon niet spelen', (lastLinks.diag || '') + ' · afspelen mislukt');
 }
 
@@ -2445,6 +2507,7 @@ function loadPrevPeaks(url, token){
 }
 async function playIndex(i){
   if (i < 0 || i >= queue.length) return;
+  spSdkActivate();
   qi = i;
   const token = ++playToken;
   const it = queue[i];
@@ -4038,6 +4101,8 @@ $('#promptQ').addEventListener('keydown', e => { if (e.key === 'Enter') runPromp
 if (state.prompt && state.prompt.text) $('#promptQ').value = state.prompt.text;
 
 hpInit();
+// get the in-app Spotify player ready in the background, so the first click can start sound right away
+if (spCanSdk()) setTimeout(() => spSdkInit().catch(() => {}), 3000);
 renderRecs(); refreshStyleFilter();
 
 spStatus(); spHandleRedirect();
