@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="55">
+<meta name="dt-version" content="56">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2306,6 +2306,22 @@ async function peekLinks(it){
   }
   return d;
 }
+// just the Spotify link: your Spotify search when connected, otherwise via song.link (from the Deezer id)
+async function spotifyLinkFor(t){
+  if (spConnected()){ const u = await spSearch(t.artist, t.title); if (u) return u; }
+  let id = t.dzTrackId;
+  if (!id){ try { const pv = await findPreview(t.artist, t.title); const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; } catch(e){} }
+  if (!id) return null;
+  const hit = await idb.get('sl:' + id);
+  if (hit && hit.d && hit.d.spotify) return hit.d.spotify;
+  if (state.slOff && Date.now() - state.slOff < 7 * 864e5) return null;
+  try {
+    const r = await fetch('https://api.song.link/v1-alpha.1/links?userCountry=NL&url=' + encodeURIComponent('https://www.deezer.com/track/' + id));
+    if (!r.ok) return null;
+    const sp = (((await r.json()).linksByPlatform || {}).spotify || {}).url, m = sp && sp.match(/track\/(\w+)/);
+    return m ? 'spotify:track:' + m[1] : null;
+  } catch(e){ return null; }
+}
 async function fullLinksRaw(it){
   let id = it.dzTrackId;
   if (!id){ try { const pv = await findPreview(it.artist, it.title); const m = (pv.deezer || '').match(/track\/(\d+)/); if (m) id = +m[1]; } catch(e){} }
@@ -3688,24 +3704,25 @@ $('#plList').addEventListener('click', async e => {
   }
   if (a === 'tospotify') return pushToSpotify(pl, b);
   if (a === 'splinks'){
-    b.disabled = true;
+    // clicking again while it's searching stops it and shows what was found so far
+    if (b.dataset.busy){ b.dataset.stop = '1'; b.textContent = 'Stoppen…'; return; }
+    b.dataset.busy = '1'; delete b.dataset.stop;
     const res = new Array(pl.tracks.length);
     let done = 0, next = 0;
-    // look up 3 at a time; each track gets at most 12 seconds
-    const worker = async () => { while (next < pl.tracks.length){ const k = next++, t = pl.tracks[k];
+    const stopped = () => !!b.dataset.stop;
+    // look up 5 at a time, only for Spotify (no YouTube/SoundCloud detours); each track gets at most 8 seconds
+    const worker = async () => { while (next < pl.tracks.length && !stopped()){ const k = next++, t = pl.tracks[k];
       let u = t.spotifyUri;
-      try {
-        if (!u && spConnected()) u = await Promise.race([spSearch(t.artist, t.title), sleep(12000).then(() => null)]);
-        if (!u) u = await Promise.race([fullLinks(asItem(t)).then(L => L && L.spotify).catch(() => null), sleep(12000).then(() => null)]);
-      } catch(err){}
+      try { if (!u) u = await Promise.race([spotifyLinkFor(t), sleep(8000).then(() => null)]); } catch(err){}
       const m = u && String(u).match(/track[:/](\w+)/);
       if (m) t.spotifyUri = 'spotify:track:' + m[1];
       res[k] = m ? 'https://open.spotify.com/track/' + m[1] : null;
-      b.textContent = `Spotify-links zoeken ${++done}/${pl.tracks.length}…`; } };
-    await Promise.all([worker(), worker(), worker()]);
+      if (!stopped()) b.textContent = `Spotify-links zoeken ${++done}/${pl.tracks.length}… (klik om te stoppen)`; } };
+    await Promise.all([worker(), worker(), worker(), worker(), worker()]);
     save();
-    b.disabled = false; b.textContent = 'Kopieer Spotify-links';
-    const links = res.filter(Boolean), missing = pl.tracks.filter((t, k) => !res[k]).map(t => t.artist + ' – ' + t.title);
+    delete b.dataset.busy; delete b.dataset.stop; b.textContent = 'Kopieer Spotify-links';
+    const links = res.filter(Boolean), missing = pl.tracks.filter((t, k) => res[k] === null).map(t => t.artist + ' – ' + t.title), skipped = pl.tracks.filter((t, k) => res[k] === undefined).length;
+    if (skipped) missing.push(`(${skipped} niet meer gezocht, je stopte het zoeken)`);
     showLinks(links, missing);
     return;
   }
