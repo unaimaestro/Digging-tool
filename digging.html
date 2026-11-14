@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Digging Tool</title>
-<meta name="dt-version" content="54">
+<meta name="dt-version" content="55">
 <meta name="dt-update" content="https://raw.githubusercontent.com/unaimaestro/Digging-tool/main/digging.html">
 <script>
 // One shared app, several tools. The port decides which tool this is: 8765 = techno (the original), 8766 = house.
@@ -2282,7 +2282,8 @@ async function spSearch(artist, title){
       if (v){ found = v.uri; break; }
     } catch(e){ if (e.status === 401 || e.status === 403) break; }
   }
-  idb.set(key, {t: Date.now(), d: found});
+  if (found || !idb) idb.set(key, {t: Date.now(), d: found});
+  else idb.set(key, {t: Date.now() - 53 * 864e5, d: null});   // a miss is only remembered for a week
   return found;
 }
 
@@ -3450,6 +3451,31 @@ $('#setList').addEventListener('keydown', async e => {
 });
 
 /* --- playlists --- */
+// The browser only lets a page copy right after a click. Looking links up takes a while,
+// so show them with their own copy button (a fresh click) instead of copying silently and failing.
+function showLinks(links, missing){
+  let box = $('#linkBox');
+  if (!box){ box = document.createElement('div'); box.id = 'linkBox'; box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px'; document.body.appendChild(box);
+    box.addEventListener('click', e => { if (e.target === box || e.target.dataset.lb === 'close') box.remove(); }); }
+  const txt = links.join('\n');
+  box.innerHTML = `<div class="card" style="width:min(640px,100%);max-height:90vh;overflow:auto;margin:0">
+    <h2 style="margin-top:0">${links.length ? links.length + ' Spotify-links' : 'Geen Spotify-links gevonden'}</h2>
+    ${links.length ? `<p class="small muted">Klik op Kopieer, open een playlist in de Spotify-app op je Mac, klik in de tracklijst en druk Cmd+V.</p>
+    <textarea readonly style="width:100%;height:160px;font-size:12px">${esc(txt)}</textarea>
+    <div class="row" style="margin:8px 0"><button class="btn primary" data-lb="copy">Kopieer</button><span class="small" data-lb="msg"></span></div>`
+    : '<p class="small muted">Verbind Spotify onder Instellingen > Spotify, dan kan de app ze zelf opzoeken (en kun je ook "Zet in Spotify" gebruiken).</p>'}
+    ${missing.length ? `<p class="small"><b>Niet gevonden op Spotify (${missing.length}):</b><br>${missing.map(esc).join('<br>')}</p>` : ''}
+    <button class="btn" data-lb="close">Sluiten</button></div>`;
+  const ta = box.querySelector('textarea'), msg = box.querySelector('[data-lb=msg]'), cp = box.querySelector('[data-lb=copy]');
+  const ok = () => { if (msg) msg.innerHTML = '<span class="ok">Gekopieerd. Plak in Spotify met Cmd+V.</span>'; };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(txt); ok(); return; } catch(e){}
+    try { ta.focus(); ta.select(); if (document.execCommand('copy')){ ok(); return; } } catch(e){}
+    if (msg) msg.innerHTML = '<span class="warn">Kopiëren lukte niet automatisch: de links zijn geselecteerd, druk Cmd+C.</span>'; ta.focus(); ta.select();
+  };
+  if (cp) cp.onclick = copy;
+  if (ta) ta.onclick = () => ta.select();
+}
 function toast(t){ const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1800); }
 function plTracksAll(){ return (state.playlists || []).flatMap(pl => pl.tracks || []).filter(t => t.artists && t.artists.length); }
 const plTrack = c => ({artist: c.artists.map(a => a.name).join(', '), title: c.title || c.releaseTitle, releaseTitle: c.releaseTitle, labels: c.labels || [],
@@ -3663,22 +3689,24 @@ $('#plList').addEventListener('click', async e => {
   if (a === 'tospotify') return pushToSpotify(pl, b);
   if (a === 'splinks'){
     b.disabled = true;
-    const links = [], missing = [];
-    for (let k = 0; k < pl.tracks.length; k++){
-      const t = pl.tracks[k];
-      b.textContent = `Spotify-links zoeken ${k + 1}/${pl.tracks.length}…`;
+    const res = new Array(pl.tracks.length);
+    let done = 0, next = 0;
+    // look up 3 at a time; each track gets at most 12 seconds
+    const worker = async () => { while (next < pl.tracks.length){ const k = next++, t = pl.tracks[k];
       let u = t.spotifyUri;
-      if (!u && spConnected()) u = await spSearch(t.artist, t.title);
-      if (!u){ try { u = (await fullLinks(asItem(t))).spotify; } catch(err){} }
+      try {
+        if (!u && spConnected()) u = await Promise.race([spSearch(t.artist, t.title), sleep(12000).then(() => null)]);
+        if (!u) u = await Promise.race([fullLinks(asItem(t)).then(L => L && L.spotify).catch(() => null), sleep(12000).then(() => null)]);
+      } catch(err){}
       const m = u && String(u).match(/track[:/](\w+)/);
-      if (m){ t.spotifyUri = 'spotify:track:' + m[1]; links.push('https://open.spotify.com/track/' + m[1]); } else missing.push(t.artist + ' – ' + t.title);
-    }
+      if (m) t.spotifyUri = 'spotify:track:' + m[1];
+      res[k] = m ? 'https://open.spotify.com/track/' + m[1] : null;
+      b.textContent = `Spotify-links zoeken ${++done}/${pl.tracks.length}…`; } };
+    await Promise.all([worker(), worker(), worker()]);
     save();
-    const txt = links.join('\n');
-    try { await navigator.clipboard.writeText(txt); } catch(err){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
     b.disabled = false; b.textContent = 'Kopieer Spotify-links';
-    if (!links.length) alert('Geen Spotify-links gevonden. Verbind Spotify onder Instellingen > Spotify, dan kan de app ze zelf opzoeken (en kun je ook "Zet in Spotify" gebruiken).');
-    else alert(`${links.length} Spotify-links gekopieerd.\n\nOpen een playlist in de Spotify-app op je Mac, klik in de tracklijst en druk Cmd+V.` + (missing.length ? `\n\nNiet gevonden op Spotify (${missing.length}):\n` + missing.join('\n') : ''));
+    const links = res.filter(Boolean), missing = pl.tracks.filter((t, k) => !res[k]).map(t => t.artist + ' – ' + t.title);
+    showLinks(links, missing);
     return;
   }
   if (a === 'suggest'){
